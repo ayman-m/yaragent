@@ -84,3 +84,4 @@ networks:
 
 volumes:
   mcp-data:
+    # Shared volume for MCP server data
