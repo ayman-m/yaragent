@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Docker Compose orchestration for YARA Agent services
 # Includes: orchestrator, MCP server, UI, and agent PoC
 services:
