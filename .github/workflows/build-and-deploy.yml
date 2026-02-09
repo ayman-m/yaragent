@@ -187,16 +187,16 @@ jobs:
 
       - name: Pull Latest Images
         run: |
-          docker-compose pull || true
+          docker compose pull || true
 
       - name: Start Services
         run: |
-          docker-compose up -d
+          docker compose up -d
 
       - name: Wait for Services to be Healthy
         run: |
           sleep 10
-          docker-compose ps
+          docker compose ps
 
       - name: Health Check - Orchestrator
         run: |
@@ -213,4 +213,4 @@ jobs:
       - name: Show Service Logs
         if: failure()
         run: |
-          docker-compose logs --tail=50
+          docker compose logs --tail=50
