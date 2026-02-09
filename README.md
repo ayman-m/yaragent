@@ -19,6 +19,7 @@ docker-compose up --build
 
 ### Check Health
 
+
 ```bash
 curl http://localhost:8000/agents         # Orchestrator
 curl http://localhost:8001/health         # MCP Server
