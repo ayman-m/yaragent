@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # Orchestrator (FastAPI WebSocket broker for agents)
+  orchestrator:
+    build:
+      context: .
+      dockerfile: services/business/orchestrator/Dockerfile
+    container_name: yaragent-orchestrator
+    ports:
+      - "8000:8000"
+    environment:
+      - LOG_LEVEL=info
+    networks:
+      - yaragent-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/agents"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # MCP Server (MCP Protocol + tools for AI agents)
+  mcp-server:
+    build:
+      context: .
+      dockerfile: services/platform/mcp-server/Dockerfile
+    container_name: yaragent-mcp-server
+    ports:
+      - "8001:8001"
+    environment:
+      - ORCHESTRATOR_URL=http://orchestrator:8000
+      - LOG_LEVEL=info
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    networks:
+      - yaragent-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # UI (Next.js dashboard)
+  ui:
+    build:
+      context: .
+      dockerfile: services/business/ui/Dockerfile
+    container_name: yaragent-ui
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=http://orchestrator:8000
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    networks:
+      - yaragent-net
+    restart: unless-stopped
+
+  # Agent PoC (for local testing; real agents run on Windows/Linux)
+  agent-poc:
+    build:
+      context: .
+      dockerfile: agents/windows-go/poc/Dockerfile.poc
+    container_name: yaragent-agent-poc
+    environment:
+      - MCP_SERVER_URL=ws://orchestrator:8000/agent/ws
+      - ENROLL_TOKEN=poc-test-token
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    networks:
+      - yaragent-net
+    restart: unless-stopped
+
+networks:
+  yaragent-net:
+    driver: bridge
+
+volumes:
+  mcp-data:

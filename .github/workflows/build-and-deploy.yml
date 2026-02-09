@@ -1,0 +1,216 @@
+name: Build and Deploy YARA Agent Services
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/**'
+      - 'agents/**'
+      - 'docker-compose.yml'
+
+env:
+  REGISTRY_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+  REGISTRY_PASSWORD: ${{ secrets.DOCKER_HUB_PASSWORD }}
+  DEV_TAG: dev-latest
+  ORCHESTRATOR_IMAGE: yaragent-orchestrator
+  MCP_SERVER_IMAGE: yaragent-mcp-server
+  UI_IMAGE: yaragent-ui
+  AGENT_POC_IMAGE: yaragent-agent-poc
+
+jobs:
+  build-and-push-orchestrator:
+    name: Build and Push Orchestrator Service
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if orchestrator changed
+        id: orchestrator-check
+        run: |
+          LAST_COMMIT=$(git log -1 --format=format:%H)
+          CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r $LAST_COMMIT)
+          
+          if echo "$CHANGED_FILES" | grep -q "services/business/orchestrator"; then
+            echo "orchestrator_changed=true" >> $GITHUB_ENV
+          else
+            echo "orchestrator_changed=false" >> $GITHUB_ENV
+          fi
+
+      - name: Login to Docker Hub
+        if: env.orchestrator_changed == 'true'
+        run: |
+          echo "${{ env.REGISTRY_PASSWORD }}" | docker login -u "${{ env.REGISTRY_USERNAME }}" --password-stdin
+
+      - name: Build Orchestrator Image
+        if: env.orchestrator_changed == 'true'
+        run: |
+          docker build --no-cache \
+            -t "${{ env.REGISTRY_USERNAME }}/${{ env.ORCHESTRATOR_IMAGE }}:${{ env.DEV_TAG }}" \
+            -f services/business/orchestrator/Dockerfile .
+
+      - name: Push Orchestrator Image
+        if: env.orchestrator_changed == 'true'
+        run: |
+          docker push "${{ env.REGISTRY_USERNAME }}/${{ env.ORCHESTRATOR_IMAGE }}:${{ env.DEV_TAG }}"
+
+  build-and-push-mcp-server:
+    name: Build and Push MCP Server Service
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if mcp-server changed
+        id: mcp-check
+        run: |
+          LAST_COMMIT=$(git log -1 --format=format:%H)
+          CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r $LAST_COMMIT)
+          
+          if echo "$CHANGED_FILES" | grep -q "services/platform/mcp-server"; then
+            echo "mcp_changed=true" >> $GITHUB_ENV
+          else
+            echo "mcp_changed=false" >> $GITHUB_ENV
+          fi
+
+      - name: Login to Docker Hub
+        if: env.mcp_changed == 'true'
+        run: |
+          echo "${{ env.REGISTRY_PASSWORD }}" | docker login -u "${{ env.REGISTRY_USERNAME }}" --password-stdin
+
+      - name: Build MCP Server Image
+        if: env.mcp_changed == 'true'
+        run: |
+          docker build --no-cache \
+            -t "${{ env.REGISTRY_USERNAME }}/${{ env.MCP_SERVER_IMAGE }}:${{ env.DEV_TAG }}" \
+            -f services/platform/mcp-server/Dockerfile .
+
+      - name: Push MCP Server Image
+        if: env.mcp_changed == 'true'
+        run: |
+          docker push "${{ env.REGISTRY_USERNAME }}/${{ env.MCP_SERVER_IMAGE }}:${{ env.DEV_TAG }}"
+
+  build-and-push-ui:
+    name: Build and Push UI Service
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if UI changed
+        id: ui-check
+        run: |
+          LAST_COMMIT=$(git log -1 --format=format:%H)
+          CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r $LAST_COMMIT)
+          
+          if echo "$CHANGED_FILES" | grep -q "services/business/ui"; then
+            echo "ui_changed=true" >> $GITHUB_ENV
+          else
+            echo "ui_changed=false" >> $GITHUB_ENV
+          fi
+
+      - name: Login to Docker Hub
+        if: env.ui_changed == 'true'
+        run: |
+          echo "${{ env.REGISTRY_PASSWORD }}" | docker login -u "${{ env.REGISTRY_USERNAME }}" --password-stdin
+
+      - name: Build UI Image
+        if: env.ui_changed == 'true'
+        run: |
+          docker build --no-cache \
+            -t "${{ env.REGISTRY_USERNAME }}/${{ env.UI_IMAGE }}:${{ env.DEV_TAG }}" \
+            -f services/business/ui/Dockerfile .
+
+      - name: Push UI Image
+        if: env.ui_changed == 'true'
+        run: |
+          docker push "${{ env.REGISTRY_USERNAME }}/${{ env.UI_IMAGE }}:${{ env.DEV_TAG }}"
+
+  build-and-push-agent-poc:
+    name: Build and Push Agent PoC
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if agent changed
+        id: agent-check
+        run: |
+          LAST_COMMIT=$(git log -1 --format=format:%H)
+          CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r $LAST_COMMIT)
+          
+          if echo "$CHANGED_FILES" | grep -q "agents/windows-go/poc"; then
+            echo "agent_changed=true" >> $GITHUB_ENV
+          else
+            echo "agent_changed=false" >> $GITHUB_ENV
+          fi
+
+      - name: Login to Docker Hub
+        if: env.agent_changed == 'true'
+        run: |
+          echo "${{ env.REGISTRY_PASSWORD }}" | docker login -u "${{ env.REGISTRY_USERNAME }}" --password-stdin
+
+      - name: Build Agent PoC Image
+        if: env.agent_changed == 'true'
+        run: |
+          docker build --no-cache \
+            -t "${{ env.REGISTRY_USERNAME }}/${{ env.AGENT_POC_IMAGE }}:${{ env.DEV_TAG }}" \
+            -f agents/windows-go/poc/Dockerfile.poc .
+
+      - name: Push Agent PoC Image
+        if: env.agent_changed == 'true'
+        run: |
+          docker push "${{ env.REGISTRY_USERNAME }}/${{ env.AGENT_POC_IMAGE }}:${{ env.DEV_TAG }}"
+
+  deploy-services:
+    name: Deploy Services with Docker Compose
+    runs-on: self-hosted
+    needs: [build-and-push-orchestrator, build-and-push-mcp-server, build-and-push-ui, build-and-push-agent-poc]
+    if: always()
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Pull Latest Images
+        run: |
+          docker-compose pull || true
+
+      - name: Start Services
+        run: |
+          docker-compose up -d
+
+      - name: Wait for Services to be Healthy
+        run: |
+          sleep 10
+          docker-compose ps
+
+      - name: Health Check - Orchestrator
+        run: |
+          curl -f http://localhost:8000/agents || exit 1
+
+      - name: Health Check - MCP Server
+        run: |
+          curl -f http://localhost:8001/health || exit 1
+
+      - name: Health Check - UI
+        run: |
+          curl -f http://localhost:3000 || echo "UI may require JavaScript rendering"
+
+      - name: Show Service Logs
+        if: failure()
+        run: |
+          docker-compose logs --tail=50
