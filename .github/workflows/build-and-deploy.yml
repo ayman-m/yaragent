@@ -8,6 +8,7 @@ on:
       - 'services/**'
       - 'agents/**'
       - 'docker-compose.yml'
+      - '.github/workflows/build-and-deploy.yml'
 
 env:
   REGISTRY_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
