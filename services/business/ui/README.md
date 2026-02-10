@@ -22,8 +22,8 @@ Build & Deploy (Docker):
 
 ```bash
 docker build -t yaragent-ui:latest -f services/business/ui/Dockerfile .
-docker run -e NEXT_PUBLIC_BACKEND_URL=http://backend:8000 -p 3000:3000 yaragent-ui:latest
+docker run -e NEXT_PUBLIC_BACKEND_URL=http://backend:8002 -p 3000:3000 yaragent-ui:latest
 ```
 
 Configuration:
-- `NEXT_PUBLIC_BACKEND_URL`: Backend MCP server URL (default: http://localhost:8000)
+- `NEXT_PUBLIC_BACKEND_URL`: Backend MCP server URL (default: http://localhost:8002)

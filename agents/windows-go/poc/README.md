@@ -8,7 +8,7 @@ Build & Run (no libyara required)
 ```bash
 cd agents/windows-go/poc
 go build -o agent-poc
-./agent-poc --url ws://localhost:8000/agent/ws --token my-enroll-token
+./agent-poc --url ws://localhost:8002/agent/ws --token my-enroll-token
 ```
 
 Using real YARA compilation

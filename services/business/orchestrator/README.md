@@ -12,12 +12,12 @@ Run locally:
 ```bash
 cd services/business/orchestrator
 python3 -m pip install -r requirements.txt
-python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
+python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8002
 ```
 
 Docker:
 
 ```bash
 docker build -t yaragent-orchestrator:latest -f services/business/orchestrator/Dockerfile .
-docker run -p 8000:8000 yaragent-orchestrator:latest
+docker run -p 8002:8002 yaragent-orchestrator:latest
 ```

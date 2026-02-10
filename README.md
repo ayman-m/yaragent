@@ -11,7 +11,7 @@ Distributed YARA scanning agent system with MCP protocol support for AI-powered 
 docker-compose up --build
 
 # Services:
-# - Orchestrator: http://localhost:8000 (WebSocket broker for agents)
+# - Orchestrator: http://localhost:8002 (WebSocket broker for agents)
 # - MCP Server: http://localhost:8001 (MCP tools for AI agents)
 # - UI: http://localhost:3000 (Dashboard)
 # - Agent PoC: Connects to orchestrator via WebSocket
@@ -21,7 +21,7 @@ docker-compose up --build
 
 
 ```bash
-curl http://localhost:8000/agents         # Orchestrator
+curl http://localhost:8002/agents         # Orchestrator
 curl http://localhost:8001/health         # MCP Server
 curl http://localhost:8001/tools          # Available MCP tools
 ```
@@ -40,7 +40,7 @@ curl http://localhost:8001/tools          # Available MCP tools
          │ (REST/FastAPI)
     ┌────▼──────────────────┐
     │   Orchestrator        │  (Business Service)
-    │   port 8000           │
+    │   port 8002           │
     └────┬──────────────────┘
          │ (WebSocket)
     ┌────▼─────────────┐
@@ -86,12 +86,12 @@ Builds and pushes Docker images to Docker Hub, then deploys via docker-compose.
 ```bash
 cd services/business/orchestrator
 python3 -m pip install -r requirements.txt
-python3 -m uvicorn src.main:app --port 8000
+python3 -m uvicorn src.main:app --port 8002
 ```
 
 **Terminal 2: MCP Server**
 ```bash
-export ORCHESTRATOR_URL=http://localhost:8000
+export ORCHESTRATOR_URL=http://localhost:8002
 cd services/platform/mcp-server
 python3 -m pip install -r requirements.txt
 python3 -m uvicorn src.main:app --port 8001
@@ -108,7 +108,7 @@ npm run dev
 ```bash
 cd agents/windows-go/poc
 go build -o agent-poc
-./agent-poc --url ws://localhost:8000/agent/ws
+./agent-poc --url ws://localhost:8002/agent/ws
 ```
 
 ## Next Steps

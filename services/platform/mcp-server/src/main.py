@@ -10,7 +10,7 @@ logger = logging.getLogger("mcp-server")
 logging.basicConfig(level=logging.INFO)
 
 # Orchestrator backend URL
-ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8000")
+ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8002")
 http_client = httpx.AsyncClient(base_url=ORCHESTRATOR_URL)
 
 

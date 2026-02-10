@@ -27,7 +27,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/agents`
+        `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8002"}/agents`
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -49,7 +49,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     async (agentId: string, ruleText: string) => {
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/push_rule`,
+          `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8002"}/push_rule`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },

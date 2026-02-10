@@ -13,5 +13,5 @@ RUN npm install --production
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 EXPOSE 3000
-ENV NEXT_PUBLIC_BACKEND_URL=http://backend:8000
+ENV NEXT_PUBLIC_BACKEND_URL=http://backend:8002
 CMD ["npm", "start"]

@@ -9,14 +9,14 @@ services:
       dockerfile: services/business/orchestrator/Dockerfile
     container_name: yaragent-orchestrator
     ports:
-      - "8000:8000"
+      - "8002:8002"
     environment:
       - LOG_LEVEL=info
     networks:
       - yaragent-net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/agents"]
+      test: ["CMD", "curl", "-f", "http://localhost:8002/agents"]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -31,7 +31,7 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - ORCHESTRATOR_URL=http://orchestrator:8000
+      - ORCHESTRATOR_URL=http://orchestrator:8002
       - LOG_LEVEL=info
     depends_on:
       - orchestrator
@@ -54,7 +54,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_BACKEND_URL=http://orchestrator:8000
+      - NEXT_PUBLIC_BACKEND_URL=http://orchestrator:8002
     depends_on:
       - orchestrator
     networks:
@@ -62,10 +62,10 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
 
   # Agent PoC (for local testing; real agents run on Windows/Linux)
   agent-poc:
@@ -74,7 +74,7 @@ services:
       dockerfile: agents/windows-go/poc/Dockerfile.poc
     container_name: yaragent-agent-poc
     environment:
-      - MCP_SERVER_URL=ws://orchestrator:8000/agent/ws
+      - MCP_SERVER_URL=ws://orchestrator:8002/agent/ws
       - ENROLL_TOKEN=poc-test-token
     depends_on:
       - orchestrator

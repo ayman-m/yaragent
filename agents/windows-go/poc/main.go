@@ -29,7 +29,7 @@ type CompileResult struct {
 func main() {
     var wsURL string
     var token string
-    flag.StringVar(&wsURL, "url", "ws://localhost:8000/agent/ws", "WebSocket URL for backend")
+    flag.StringVar(&wsURL, "url", "ws://localhost:8002/agent/ws", "WebSocket URL for backend")
     flag.StringVar(&token, "token", "", "Enrollment token (optional)")
     flag.Parse()
 
