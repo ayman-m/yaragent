@@ -34,8 +34,7 @@ services:
       - ORCHESTRATOR_URL=http://orchestrator:8000
       - LOG_LEVEL=info
     depends_on:
-      orchestrator:
-        condition: service_healthy
+      - orchestrator
     networks:
       - yaragent-net
     restart: unless-stopped
@@ -57,8 +56,7 @@ services:
     environment:
       - NEXT_PUBLIC_BACKEND_URL=http://orchestrator:8000
     depends_on:
-      orchestrator:
-        condition: service_healthy
+      - orchestrator
     networks:
       - yaragent-net
     restart: unless-stopped
@@ -73,8 +71,7 @@ services:
       - MCP_SERVER_URL=ws://orchestrator:8000/agent/ws
       - ENROLL_TOKEN=poc-test-token
     depends_on:
-      orchestrator:
-        condition: service_healthy
+      - orchestrator
     networks:
       - yaragent-net
     restart: unless-stopped

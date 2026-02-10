@@ -196,7 +196,24 @@ jobs:
 
       - name: Wait for Services to be Healthy
         run: |
-          sleep 10
+          echo "Waiting for services to start..."
+          sleep 20
+          
+          # Retry logic for orchestrator
+          for i in {1..10}; do
+            if curl -f http://localhost:8000/agents 2>/dev/null; then
+              echo "✓ Orchestrator is healthy"
+              break
+            fi
+            if [ $i -eq 10 ]; then
+              echo "✗ Orchestrator failed after 10 retries"
+              docker compose logs orchestrator
+              exit 1
+            fi
+            echo "Retry $i/10... waiting for orchestrator"
+            sleep 5
+          done
+          
           docker compose ps
 
       - name: Health Check - Orchestrator
