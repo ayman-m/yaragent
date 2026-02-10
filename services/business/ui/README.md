@@ -1,29 +1,17 @@
 YARA Agent UI (Next.js)
 
-Minimal Next.js UI for managing YARA scanning agents and pushing rules.
+The UI now supports:
+- Initial setup flow (create first admin)
+- Login/logout with JWT
+- Authenticated calls to orchestrator via Nginx `/api/*`
 
-Features:
-- Display list of connected agents
-- Real-time agent status (auto-refresh every 5s)
-- Push YARA rules to agents and view compile results
-- Tailwind CSS styling
+Runtime expectation:
+- Public entrypoint: `https://<host>/`
+- API base path: `/api`
 
-Build & Run (local dev):
+Required env vars for container TLS:
+- `UI_CERT_PRIV`
+- `UI_CERT_PUB` (optional, self-signed generated if omitted)
 
-```bash
-cd services/business/ui
-npm install
-npm run dev
-```
-
-Then visit http://localhost:3000
-
-Build & Deploy (Docker):
-
-```bash
-docker build -t yaragent-ui:latest -f services/business/ui/Dockerfile .
-docker run -e NEXT_PUBLIC_BACKEND_URL=http://backend:8002 -p 3000:3000 yaragent-ui:latest
-```
-
-Configuration:
-- `NEXT_PUBLIC_BACKEND_URL`: Backend MCP server URL (default: http://localhost:8002)
+Useful env vars:
+- `NEXT_PUBLIC_API_BASE` (default `/api`)

@@ -9,10 +9,15 @@ RUN npm prune --omit=dev
 
 FROM node:22-alpine
 WORKDIR /app
+RUN apk add --no-cache openssl curl
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/server.js ./server.js
+COPY --from=builder /app/docker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 EXPOSE 3000
-ENV NEXT_PUBLIC_BACKEND_URL=http://backend:8002
-CMD ["npm", "start"]
+ENV NEXT_PUBLIC_API_BASE=/api
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["node", "server.js"]

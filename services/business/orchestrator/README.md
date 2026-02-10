@@ -1,23 +1,23 @@
 Agent Orchestrator (FastAPI)
 
-This service manages agent connections, job queuing, and rule distribution.
-
 Endpoints:
-- WebSocket `/agent/ws` — agent connection and message routing
-- `GET /agents` — list connected agents
-- `POST /push_rule` — push rule to agent (body: { "agent_id": "...", "rule_text": "..." })
+- `GET /health` (public)
+- `GET /setup/status` (public)
+- `POST /auth/setup` (public, first run only)
+- `POST /auth/login` (public)
+- `GET /agents` (JWT/API-token protected)
+- `POST /push_rule` (JWT/API-token protected)
+- `WS /agent/ws` (agent channel)
 
-Run locally:
+TLS is required in container runtime.
 
-```bash
-cd services/business/orchestrator
-python3 -m pip install -r requirements.txt
-python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8002
-```
+Required env vars:
+- `ORCH_CERT_PRIV`
+- `ORCH_CERT_PUB` (optional, self-signed generated if omitted)
+- `JWT_SECRET_KEY`
 
-Docker:
-
-```bash
-docker build -t yaragent-orchestrator:latest -f services/business/orchestrator/Dockerfile .
-docker run -p 8002:8002 yaragent-orchestrator:latest
-```
+Optional env vars:
+- `INITIAL_SETUP_TOKEN`
+- `ORCHESTRATOR_API_TOKEN`
+- `ACCESS_TOKEN_EXPIRE_MINUTES`
+- `AUTH_DATA_FILE` (default `/app/data/auth.json`)

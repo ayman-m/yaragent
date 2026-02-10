@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/base64"
 	"flag"
 	"fmt"
@@ -43,6 +44,10 @@ func main() {
 	_ = os.MkdirAll(baseDir, 0o755)
 
 	dialer := websocket.DefaultDialer
+	if u.Scheme == "wss" {
+		// Internal containers use self-signed certs by default.
+		dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
 	for {
 		log.Printf("connecting to %s", u.String())
 		conn, _, err := dialer.Dial(u.String(), nil)

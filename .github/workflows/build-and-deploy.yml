@@ -7,6 +7,7 @@ on:
     paths:
       - 'services/**'
       - 'agents/**'
+      - 'infra/**'
       - 'docker-compose.yml'
       - '.github/workflows/build-and-deploy.yml'
 
@@ -181,6 +182,17 @@ jobs:
     runs-on: self-hosted
     needs: [build-and-push-orchestrator, build-and-push-mcp-server, build-and-push-ui, build-and-push-agent-poc]
     if: always()
+    env:
+      JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+      INITIAL_SETUP_TOKEN: ${{ secrets.INITIAL_SETUP_TOKEN }}
+      ORCHESTRATOR_API_TOKEN: ${{ secrets.ORCHESTRATOR_API_TOKEN }}
+      ORCH_CERT_PRIV: ${{ secrets.ORCH_CERT_PRIV }}
+      ORCH_CERT_PUB: ${{ secrets.ORCH_CERT_PUB }}
+      UI_CERT_PRIV: ${{ secrets.UI_CERT_PRIV }}
+      UI_CERT_PUB: ${{ secrets.UI_CERT_PUB }}
+      NGINX_CERT_PRIV: ${{ secrets.NGINX_CERT_PRIV }}
+      NGINX_CERT_PUB: ${{ secrets.NGINX_CERT_PUB }}
+      NGINX_SERVER_NAME: ${{ secrets.NGINX_SERVER_NAME }}
 
     steps:
       - name: Checkout Repository
@@ -190,6 +202,23 @@ jobs:
         run: |
           docker compose pull || true
 
+      - name: Validate Required Secrets
+        run: |
+          required_vars=(
+            JWT_SECRET_KEY
+            ORCHESTRATOR_API_TOKEN
+            ORCH_CERT_PRIV
+            UI_CERT_PRIV
+            NGINX_CERT_PRIV
+          )
+
+          for v in "${required_vars[@]}"; do
+            if [ -z "${!v}" ]; then
+              echo "Missing required secret/env: $v"
+              exit 1
+            fi
+          done
+
       - name: Start Services
         run: |
           docker compose up -d --build --remove-orphans
@@ -197,46 +226,46 @@ jobs:
       - name: Wait for Services to be Healthy
         run: |
           echo "Waiting for services to start..."
-          ORCH_CID=$(docker compose ps -q orchestrator)
-          if [ -z "$ORCH_CID" ]; then
-            echo "✗ Orchestrator container not found"
+          NGINX_CID=$(docker compose ps -q nginx)
+          if [ -z "$NGINX_CID" ]; then
+            echo "✗ Nginx container not found"
             docker compose ps
             exit 1
           fi
 
           for i in {1..24}; do
-            ORCH_HEALTH=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$ORCH_CID")
-            if [ "$ORCH_HEALTH" = "healthy" ]; then
-              echo "✓ Orchestrator container is healthy"
+            NGINX_HEALTH=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$NGINX_CID")
+            if [ "$NGINX_HEALTH" = "healthy" ]; then
+              echo "✓ Nginx container is healthy"
               break
             fi
 
             if [ "$i" -eq 24 ]; then
-              echo "✗ Orchestrator did not become healthy"
-              docker compose logs orchestrator
+              echo "✗ Nginx did not become healthy"
+              docker compose logs nginx
               exit 1
             fi
 
-            echo "Retry $i/24... orchestrator health=$ORCH_HEALTH"
+            echo "Retry $i/24... nginx health=$NGINX_HEALTH"
             sleep 5
           done
 
-          # Keep an HTTP probe for external reachability on host networking.
-          curl -f http://localhost:8002/agents >/dev/null
+          # HTTPS probe via reverse proxy.
+          curl -kf https://localhost/api/health >/dev/null
 
           docker compose ps
 
-      - name: Health Check - Orchestrator
+      - name: Health Check - Orchestrator (via Nginx HTTPS)
         run: |
-          curl -f http://localhost:8002/agents || exit 1
+          curl -kf https://localhost/api/health || exit 1
 
-      - name: Health Check - MCP Server
+      - name: Health Check - MCP Server (container-local)
         run: |
-          curl -f http://localhost:8001/health || exit 1
+          docker compose exec -T mcp-server curl -f http://localhost:8001/health || exit 1
 
-      - name: Health Check - UI
+      - name: Health Check - UI (via Nginx HTTPS)
         run: |
-          curl -f http://localhost:3000 || echo "UI may require JavaScript rendering"
+          curl -kf https://localhost || exit 1
 
       - name: Show Service Logs
         if: failure()

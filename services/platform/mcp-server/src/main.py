@@ -1,6 +1,7 @@
 import os
 import logging
-from typing import Any, Optional
+from typing import Optional
+
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
@@ -10,8 +11,24 @@ logger = logging.getLogger("mcp-server")
 logging.basicConfig(level=logging.INFO)
 
 # Orchestrator backend URL
-ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://orchestrator:8002")
-http_client = httpx.AsyncClient(base_url=ORCHESTRATOR_URL)
+ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "https://orchestrator:8002")
+ORCHESTRATOR_API_TOKEN = os.getenv("ORCHESTRATOR_API_TOKEN", "")
+ORCHESTRATOR_TLS_VERIFY = os.getenv("ORCHESTRATOR_TLS_VERIFY", "false").lower() == "true"
+
+
+def _default_headers() -> dict:
+    headers = {}
+    if ORCHESTRATOR_API_TOKEN:
+        headers["Authorization"] = f"Bearer {ORCHESTRATOR_API_TOKEN}"
+    return headers
+
+
+http_client = httpx.AsyncClient(
+    base_url=ORCHESTRATOR_URL,
+    verify=ORCHESTRATOR_TLS_VERIFY,
+    headers=_default_headers(),
+    timeout=30.0,
+)
 
 
 @app.on_event("startup")
@@ -28,7 +45,7 @@ async def shutdown():
 async def health():
     """Health check endpoint."""
     try:
-        resp = await http_client.get("/agents")
+        resp = await http_client.get("/health")
         if resp.status_code == 200:
             return JSONResponse({"status": "healthy"})
     except Exception as e:

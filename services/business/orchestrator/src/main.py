@@ -2,11 +2,18 @@ import asyncio
 import base64
 import json
 import logging
+import os
+import threading
 import uuid
-from typing import Dict
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Dict, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 
 app = FastAPI()
 logger = logging.getLogger("orchestrator")
@@ -17,9 +24,151 @@ agents: Dict[str, WebSocket] = {}
 # agent_id -> asyncio.Queue of incoming messages from agent
 agent_queues: Dict[str, asyncio.Queue] = {}
 
+security = HTTPBearer()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+INITIAL_SETUP_TOKEN = os.getenv("INITIAL_SETUP_TOKEN", "")
+ORCHESTRATOR_API_TOKEN = os.getenv("ORCHESTRATOR_API_TOKEN", "")
+AUTH_DATA_FILE = Path(os.getenv("AUTH_DATA_FILE", "/app/data/auth.json"))
+
+
+class AuthStore:
+    def __init__(self, auth_file: Path):
+        self.auth_file = auth_file
+        self.lock = threading.Lock()
+
+    def _ensure_parent(self) -> None:
+        self.auth_file.parent.mkdir(parents=True, exist_ok=True)
+
+    def is_initialized(self) -> bool:
+        return self.auth_file.exists()
+
+    def load(self) -> Optional[dict]:
+        if not self.auth_file.exists():
+            return None
+        try:
+            return json.loads(self.auth_file.read_text(encoding="utf-8"))
+        except Exception:
+            logger.exception("failed to read auth data")
+            return None
+
+    def initialize(self, username: str, password_hash: str) -> None:
+        with self.lock:
+            if self.auth_file.exists():
+                raise ValueError("already initialized")
+            self._ensure_parent()
+            payload = {
+                "username": username,
+                "password_hash": password_hash,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            self.auth_file.write_text(json.dumps(payload), encoding="utf-8")
+
+
+auth_store = AuthStore(AUTH_DATA_FILE)
+
+
+def create_access_token(subject: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload = {"sub": subject, "exp": expire, "type": "access"}
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def decode_token(token: str) -> Optional[dict]:
+    try:
+        return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    except JWTError:
+        return None
+
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    token = credentials.credentials
+
+    if ORCHESTRATOR_API_TOKEN and token == ORCHESTRATOR_API_TOKEN:
+        return {"sub": "service", "role": "service"}
+
+    payload = decode_token(token)
+    if payload is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+
+    if payload.get("type") != "access":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
+
+    sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
+    return payload
+
+
+@app.on_event("startup")
+async def startup() -> None:
+    if JWT_SECRET_KEY == "change-me":
+        logger.warning("JWT_SECRET_KEY is using default value. Set it via environment secret.")
+
+
+@app.get("/health")
+async def health() -> JSONResponse:
+    return JSONResponse({"status": "healthy"})
+
+
+@app.get("/setup/status")
+async def setup_status() -> JSONResponse:
+    return JSONResponse({"initialized": auth_store.is_initialized()})
+
+
+@app.post("/auth/setup")
+async def setup_admin(payload: dict) -> JSONResponse:
+    if auth_store.is_initialized():
+        raise HTTPException(status_code=409, detail="already initialized")
+
+    username = (payload.get("username") or "").strip()
+    password = payload.get("password") or ""
+    setup_token = payload.get("setup_token") or ""
+
+    if INITIAL_SETUP_TOKEN and setup_token != INITIAL_SETUP_TOKEN:
+        raise HTTPException(status_code=401, detail="invalid setup token")
+
+    if len(username) < 3:
+        raise HTTPException(status_code=400, detail="username must be at least 3 characters")
+
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="password must be at least 8 characters")
+
+    password_hash = pwd_context.hash(password)
+    try:
+        auth_store.initialize(username=username, password_hash=password_hash)
+    except ValueError:
+        raise HTTPException(status_code=409, detail="already initialized")
+
+    token = create_access_token(subject=username)
+    return JSONResponse({"access_token": token, "token_type": "bearer", "username": username})
+
+
+@app.post("/auth/login")
+async def login(payload: dict) -> JSONResponse:
+    if not auth_store.is_initialized():
+        raise HTTPException(status_code=412, detail="setup required")
+
+    username = (payload.get("username") or "").strip()
+    password = payload.get("password") or ""
+
+    data = auth_store.load()
+    if data is None:
+        raise HTTPException(status_code=500, detail="auth store unavailable")
+
+    if username != data.get("username") or not pwd_context.verify(password, data.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="invalid username or password")
+
+    token = create_access_token(subject=username)
+    return JSONResponse({"access_token": token, "token_type": "bearer", "username": username})
+
 
 @app.get("/agents")
-async def list_agents():
+async def list_agents(_: dict = Depends(get_current_user)):
     return JSONResponse([{"id": aid} for aid in agents.keys()])
 
 
@@ -53,7 +202,7 @@ async def agent_ws(ws: WebSocket):
 
 
 @app.post("/push_rule")
-async def push_rule(payload: dict):
+async def push_rule(payload: dict, _: dict = Depends(get_current_user)):
     """Push a rule to an agent and wait for compile result.
 
     JSON body: { "agent_id": "...", "id": "optional-job-id", "rule_text": "..." }

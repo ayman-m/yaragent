@@ -1,0 +1,72 @@
+upstream yaragent_ui_upstream {
+    server ${UI_UPSTREAM};
+    keepalive 32;
+}
+
+upstream yaragent_api_upstream {
+    server ${API_UPSTREAM};
+    keepalive 32;
+}
+
+upstream yaragent_mcp_upstream {
+    server ${MCP_UPSTREAM};
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name ${SERVER_NAME};
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name ${SERVER_NAME};
+
+    ssl_certificate ${NGINX_CERT_FILE};
+    ssl_certificate_key ${NGINX_KEY_FILE};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+
+    client_max_body_size 25m;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+
+    location / {
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_ssl_verify off;
+        proxy_pass https://yaragent_ui_upstream;
+    }
+
+    location /api/ {
+        proxy_http_version 1.1;
+        proxy_read_timeout ${API_TIMEOUT_SECONDS}s;
+        proxy_send_timeout ${API_TIMEOUT_SECONDS}s;
+        proxy_set_header Connection "";
+        proxy_ssl_verify off;
+        proxy_pass https://yaragent_api_upstream/;
+    }
+
+    location /mcp/ {
+        proxy_http_version 1.1;
+        proxy_read_timeout ${API_TIMEOUT_SECONDS}s;
+        proxy_send_timeout ${API_TIMEOUT_SECONDS}s;
+        proxy_set_header Connection "";
+        proxy_pass http://yaragent_mcp_upstream/;
+    }
+
+    location /ws/ {
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout ${API_TIMEOUT_SECONDS}s;
+        proxy_send_timeout ${API_TIMEOUT_SECONDS}s;
+        proxy_ssl_verify off;
+        proxy_pass https://yaragent_api_upstream/;
+    }
+}

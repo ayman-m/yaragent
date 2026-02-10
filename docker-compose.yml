@@ -1,40 +1,50 @@
 # Docker Compose orchestration for YARA Agent services
-# Includes: orchestrator, MCP server, UI, and agent PoC
-# All Docker builds validated locally - ready for CI/CD deployment
+# TLS is enforced end-to-end: nginx -> ui/orchestrator over HTTPS
 services:
-  # Orchestrator (FastAPI WebSocket broker for agents)
   orchestrator:
     build:
       context: .
       dockerfile: services/business/orchestrator/Dockerfile
     container_name: yaragent-orchestrator
-    ports:
-      - "8002:8002"
+    expose:
+      - "8002"
     environment:
       - LOG_LEVEL=info
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      - INITIAL_SETUP_TOKEN=${INITIAL_SETUP_TOKEN:-}
+      - ORCHESTRATOR_API_TOKEN=${ORCHESTRATOR_API_TOKEN:-}
+      - ORCH_CERT_PRIV=${ORCH_CERT_PRIV}
+      - ORCH_CERT_PUB=${ORCH_CERT_PUB}
+      - AUTH_DATA_FILE=/app/data/auth.json
+    volumes:
+      - orchestrator-data:/app/data
     networks:
       - yaragent-net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/agents"]
+      test: ["CMD", "curl", "-kf", "https://localhost:8002/health"]
       interval: 10s
       timeout: 10s
-      retries: 5
-      start_period: 15s
+      retries: 8
+      start_period: 20s
 
-  # MCP Server (MCP Protocol + tools for AI agents)
   mcp-server:
     build:
       context: .
       dockerfile: services/platform/mcp-server/Dockerfile
     container_name: yaragent-mcp-server
-    ports:
-      - "8001:8001"
+    expose:
+      - "8001"
     environment:
-      - ORCHESTRATOR_URL=http://orchestrator:8002
+      - ORCHESTRATOR_URL=https://orchestrator:8002
+      - ORCHESTRATOR_API_TOKEN=${ORCHESTRATOR_API_TOKEN:-}
+      - ORCHESTRATOR_TLS_VERIFY=false
       - LOG_LEVEL=info
     depends_on:
-      - orchestrator
+      orchestrator:
+        condition: service_healthy
     networks:
       - yaragent-net
     restart: unless-stopped
@@ -42,39 +52,73 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 10s
       timeout: 10s
-      retries: 5
-      start_period: 15s
+      retries: 8
+      start_period: 20s
 
-  # UI (Next.js dashboard)
   ui:
     build:
       context: .
       dockerfile: services/business/ui/Dockerfile
     container_name: yaragent-ui
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
-      - NEXT_PUBLIC_BACKEND_URL=http://orchestrator:8002
+      - NEXT_PUBLIC_API_BASE=/api
+      - UI_CERT_PRIV=${UI_CERT_PRIV}
+      - UI_CERT_PUB=${UI_CERT_PUB}
     depends_on:
-      - orchestrator
+      orchestrator:
+        condition: service_healthy
     networks:
       - yaragent-net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      test: ["CMD", "curl", "-kf", "https://localhost:3000"]
       interval: 15s
       timeout: 5s
-      retries: 8
+      retries: 10
       start_period: 60s
 
-  # Agent PoC (for local testing; real agents run on Windows/Linux)
+  nginx:
+    build:
+      context: .
+      dockerfile: infra/nginx/Dockerfile
+    container_name: yaragent-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SERVER_NAME=${NGINX_SERVER_NAME:-localhost}
+      - API_TIMEOUT_SECONDS=${API_TIMEOUT_SECONDS:-60}
+      - UI_UPSTREAM=ui:3000
+      - API_UPSTREAM=orchestrator:8002
+      - MCP_UPSTREAM=mcp-server:8001
+      - NGINX_CERT_PRIV=${NGINX_CERT_PRIV}
+      - NGINX_CERT_PUB=${NGINX_CERT_PUB}
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+      ui:
+        condition: service_healthy
+      mcp-server:
+        condition: service_healthy
+    networks:
+      - yaragent-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-kf", "https://localhost"]
+      interval: 10s
+      timeout: 10s
+      retries: 8
+      start_period: 20s
+
   agent-poc:
     build:
       context: .
       dockerfile: agents/windows-go/poc/Dockerfile.poc
     container_name: yaragent-agent-poc
+    command: ["--url", "wss://orchestrator:8002/agent/ws"]
     environment:
-      - MCP_SERVER_URL=ws://orchestrator:8002/agent/ws
       - ENROLL_TOKEN=poc-test-token
     depends_on:
       orchestrator:
@@ -88,5 +132,4 @@ networks:
     driver: bridge
 
 volumes:
-  mcp-data:
-    # Shared volume for MCP server data
+  orchestrator-data:

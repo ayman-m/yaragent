@@ -11,20 +11,33 @@ Distributed YARA scanning agent system with MCP protocol support for AI-powered 
 docker-compose up --build
 
 # Services:
-# - Orchestrator: http://localhost:8002 (WebSocket broker for agents)
-# - MCP Server: http://localhost:8001 (MCP tools for AI agents)
-# - UI: http://localhost:3000 (Dashboard)
-# - Agent PoC: Connects to orchestrator via WebSocket
+# - Nginx: https://localhost (public entrypoint)
+# - Orchestrator: internal https://orchestrator:8002
+# - MCP Server: internal http://mcp-server:8001
+# - UI: internal https://ui:3000
+# - Agent PoC: connects to orchestrator via WSS
 ```
 
 ### Check Health
 
 
 ```bash
-curl http://localhost:8002/agents         # Orchestrator
-curl http://localhost:8001/health         # MCP Server
-curl http://localhost:8001/tools          # Available MCP tools
+curl -k https://localhost/api/health      # Orchestrator via Nginx
+curl -k https://localhost                 # UI via Nginx
+docker compose exec -T mcp-server curl -f http://localhost:8001/health
 ```
+
+### Required Environment Variables
+
+`docker-compose.yml` requires these values (set locally or via GitHub Actions secrets):
+
+- `JWT_SECRET_KEY`
+- `ORCHESTRATOR_API_TOKEN` (used by MCP-to-orchestrator calls)
+- `INITIAL_SETUP_TOKEN` (optional for first-run setup hardening)
+- `ORCH_CERT_PRIV`, `ORCH_CERT_PUB`
+- `UI_CERT_PRIV`, `UI_CERT_PUB`
+- `NGINX_CERT_PRIV`, `NGINX_CERT_PUB`
+- `NGINX_SERVER_NAME` (optional, defaults to `localhost`)
 
 ## Architecture
 
@@ -48,7 +61,7 @@ curl http://localhost:8001/tools          # Available MCP tools
     │  (via WS)        │
     └──────────────────┘
 
-UI (Next.js, port 3000) → Orchestrator (direct API calls)
+Browser → Nginx (`https://localhost`) → UI/API (internal TLS)
 ```
 
 ## Services
