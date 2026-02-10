@@ -192,28 +192,38 @@ jobs:
 
       - name: Start Services
         run: |
-          docker compose up -d
+          docker compose up -d --build --remove-orphans
 
       - name: Wait for Services to be Healthy
         run: |
           echo "Waiting for services to start..."
-          sleep 20
-          
-          # Retry logic for orchestrator
-          for i in {1..10}; do
-            if curl -f http://localhost:8002/agents 2>/dev/null; then
-              echo "✓ Orchestrator is healthy"
+          ORCH_CID=$(docker compose ps -q orchestrator)
+          if [ -z "$ORCH_CID" ]; then
+            echo "✗ Orchestrator container not found"
+            docker compose ps
+            exit 1
+          fi
+
+          for i in {1..24}; do
+            ORCH_HEALTH=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$ORCH_CID")
+            if [ "$ORCH_HEALTH" = "healthy" ]; then
+              echo "✓ Orchestrator container is healthy"
               break
             fi
-            if [ $i -eq 10 ]; then
-              echo "✗ Orchestrator failed after 10 retries"
+
+            if [ "$i" -eq 24 ]; then
+              echo "✗ Orchestrator did not become healthy"
               docker compose logs orchestrator
               exit 1
             fi
-            echo "Retry $i/10... waiting for orchestrator"
+
+            echo "Retry $i/24... orchestrator health=$ORCH_HEALTH"
             sleep 5
           done
-          
+
+          # Keep an HTTP probe for external reachability on host networking.
+          curl -f http://localhost:8002/agents >/dev/null
+
           docker compose ps
 
       - name: Health Check - Orchestrator
