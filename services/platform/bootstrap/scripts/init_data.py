@@ -20,7 +20,27 @@ API_TIMEOUT_SECONDS = os.getenv("INIT_NGINX_API_TIMEOUT_SECONDS", "60")
 NGINX_CERT_PRIV = os.getenv("INIT_NGINX_CERT_PRIV", "")
 NGINX_CERT_PUB = os.getenv("INIT_NGINX_CERT_PUB", "")
 
-POSTGRES_DSN = os.getenv("INIT_POSTGRES_DSN", "postgresql://postgres:postgres@postgres:5432/yaragent")
+POSTGRES_DSN = (os.getenv("INIT_POSTGRES_DSN", "") or "").strip()
+POSTGRES_HOST = os.getenv("INIT_POSTGRES_HOST", "postgres")
+POSTGRES_PORT = int(os.getenv("INIT_POSTGRES_PORT", "5432"))
+POSTGRES_USER = os.getenv("INIT_POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.getenv("INIT_POSTGRES_PASSWORD", "postgres")
+POSTGRES_DB = os.getenv("INIT_POSTGRES_DB", "yaragent")
+
+
+def _pg_connect():
+    dsn = (POSTGRES_DSN or "").strip()
+    if dsn:
+        return psycopg.connect(dsn, autocommit=True)
+
+    return psycopg.connect(
+        host=POSTGRES_HOST,
+        port=POSTGRES_PORT,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
+        dbname=POSTGRES_DB,
+        autocommit=True,
+    )
 
 
 def _write(path: Path, content: str) -> None:
@@ -69,7 +89,7 @@ def render_nginx_assets() -> None:
 def _wait_for_postgres(max_attempts: int = 60, sleep_seconds: float = 2.0) -> None:
     for _ in range(max_attempts):
         try:
-            with psycopg.connect(POSTGRES_DSN, autocommit=True) as conn:
+            with _pg_connect() as conn:
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1")
                 return
@@ -79,7 +99,7 @@ def _wait_for_postgres(max_attempts: int = 60, sleep_seconds: float = 2.0) -> No
 
 
 def init_postgres_schema() -> None:
-    with psycopg.connect(POSTGRES_DSN, autocommit=True) as conn:
+    with _pg_connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """

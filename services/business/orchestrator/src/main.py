@@ -31,7 +31,12 @@ JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 INITIAL_SETUP_TOKEN = os.getenv("INITIAL_SETUP_TOKEN", "")
 ORCHESTRATOR_API_TOKEN = os.getenv("ORCHESTRATOR_API_TOKEN", "")
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@postgres:5432/yaragent")
+DATABASE_URL = (os.getenv("DATABASE_URL", "") or "").strip()
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
+POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
+POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "yaragent")
 
 _db_pool: Optional[asyncpg.Pool] = None
 
@@ -99,8 +104,18 @@ async def startup() -> None:
     global _db_pool
     if JWT_SECRET_KEY == "change-me":
         logger.warning("JWT_SECRET_KEY is using default value. Set it via environment secret.")
-
-    _db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+    if DATABASE_URL:
+        _db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+    else:
+        _db_pool = await asyncpg.create_pool(
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD,
+            database=POSTGRES_DB,
+            min_size=1,
+            max_size=10,
+        )
 
 
 @app.on_event("shutdown")

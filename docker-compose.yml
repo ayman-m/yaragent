@@ -29,7 +29,12 @@ services:
       dockerfile: services/platform/bootstrap/Dockerfile
     container_name: yaragent-init
     environment:
-      - INIT_POSTGRES_DSN=${INIT_POSTGRES_DSN:-postgresql://postgres:postgres@postgres:5432/yaragent}
+      - INIT_POSTGRES_DSN=${INIT_POSTGRES_DSN:-}
+      - INIT_POSTGRES_HOST=postgres
+      - INIT_POSTGRES_PORT=5432
+      - INIT_POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - INIT_POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - INIT_POSTGRES_DB=${POSTGRES_DB:-yaragent}
       - INIT_NGINX_RENDER=true
       - INIT_NGINX_OUTPUT_DIR=/tmp/nginx-generated
       - INIT_NGINX_SERVER_NAME=${NGINX_SERVER_NAME:-localhost}
@@ -57,7 +62,12 @@ services:
       - "8002"
     environment:
       - LOG_LEVEL=info
-      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/yaragent}
+      - DATABASE_URL=${DATABASE_URL:-}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-yaragent}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
