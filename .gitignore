@@ -6,3 +6,4 @@ agents/windows-go/poc/poc
 ref_projects/*
 myideas.txt
 plans/*
+start_tunnels.sh
