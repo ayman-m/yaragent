@@ -18,6 +18,7 @@ export default function Page() {
   } = useAgents();
 
   const [initialized, setInitialized] = useState<boolean | null>(null);
+  const [setupTokenRequired, setSetupTokenRequired] = useState(false);
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [setupToken, setSetupToken] = useState("");
@@ -27,8 +28,14 @@ export default function Page() {
 
   useEffect(() => {
     checkSetupStatus()
-      .then(setInitialized)
-      .catch(() => setInitialized(false));
+      .then((status) => {
+        setInitialized(status.initialized);
+        setSetupTokenRequired(status.setupTokenRequired);
+      })
+      .catch(() => {
+        setInitialized(false);
+        setSetupTokenRequired(false);
+      });
   }, [checkSetupStatus]);
 
   useEffect(() => {
@@ -96,7 +103,7 @@ export default function Page() {
           setDefaultRuleNamespace={setDefaultRuleNamespace}
           submitLabel={loading ? "Creating..." : "Create Admin"}
           error={error}
-          includeSetupToken
+          includeSetupToken={setupTokenRequired}
           includeSettings
         />
       </Shell>
@@ -283,7 +290,7 @@ function AuthForm({
       ) : null}
       {includeSetupToken ? (
         <div>
-          <label className="mb-1 block text-sm text-slate-300">Setup Token (optional)</label>
+          <label className="mb-1 block text-sm text-slate-300">Setup Token</label>
           <input
             type="password"
             value={setupToken}

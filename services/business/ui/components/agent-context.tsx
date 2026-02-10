@@ -13,12 +13,17 @@ interface SetupSettings {
   default_rule_namespace: string;
 }
 
+interface SetupStatus {
+  initialized: boolean;
+  setupTokenRequired: boolean;
+}
+
 interface AgentContextType {
   agents: Agent[];
   token: string | null;
   refreshAgents: () => Promise<void>;
   pushRule: (agentId: string, ruleText: string) => Promise<any>;
-  checkSetupStatus: () => Promise<boolean>;
+  checkSetupStatus: () => Promise<SetupStatus>;
   setupAdmin: (username: string, password: string, settings: SetupSettings, setupToken?: string) => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
@@ -66,7 +71,10 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     const res = await fetch(`${API_BASE}/setup/status`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    return Boolean(data.initialized);
+    return {
+      initialized: Boolean(data.initialized),
+      setupTokenRequired: Boolean(data.setup_token_required),
+    };
   }, []);
 
   const setupAdmin = useCallback(async (username: string, password: string, settings: SetupSettings, setupToken?: string) => {

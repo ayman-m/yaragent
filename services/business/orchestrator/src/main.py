@@ -134,7 +134,8 @@ async def health() -> JSONResponse:
 @app.get("/setup/status")
 async def setup_status() -> JSONResponse:
     initialized = await _is_initialized()
-    return JSONResponse({"initialized": initialized})
+    setup_token_required = bool(INITIAL_SETUP_TOKEN.strip())
+    return JSONResponse({"initialized": initialized, "setup_token_required": setup_token_required})
 
 
 @app.post("/auth/setup")
