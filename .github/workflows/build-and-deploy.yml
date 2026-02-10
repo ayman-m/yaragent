@@ -235,10 +235,10 @@ jobs:
         run: |
           echo "Waiting for services to start..."
 
-          INIT_CID=$(docker compose ps -q init)
+          INIT_CID=$(docker compose ps -aq init | head -n1)
           if [ -z "$INIT_CID" ]; then
             echo "✗ Init container not found"
-            docker compose ps
+            docker compose ps -a
             exit 1
           fi
 
