@@ -77,7 +77,8 @@ services:
       - MCP_SERVER_URL=ws://orchestrator:8002/agent/ws
       - ENROLL_TOKEN=poc-test-token
     depends_on:
-      - orchestrator
+      orchestrator:
+        condition: service_healthy
     networks:
       - yaragent-net
     restart: unless-stopped
