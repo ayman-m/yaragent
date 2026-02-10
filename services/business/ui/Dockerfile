@@ -1,8 +1,8 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
-COPY package*.json ./
+COPY services/business/ui/package*.json ./
 RUN npm install
-COPY . .
+COPY services/business/ui/ .
 RUN npm run build
 
 FROM node:22-alpine
