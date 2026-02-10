@@ -7,13 +7,19 @@ interface Agent {
   status: "connected" | "disconnected" | "error";
 }
 
+interface SetupSettings {
+  org_name: string;
+  environment: string;
+  default_rule_namespace: string;
+}
+
 interface AgentContextType {
   agents: Agent[];
   token: string | null;
   refreshAgents: () => Promise<void>;
   pushRule: (agentId: string, ruleText: string) => Promise<any>;
   checkSetupStatus: () => Promise<boolean>;
-  setupAdmin: (username: string, password: string, setupToken?: string) => Promise<void>;
+  setupAdmin: (username: string, password: string, settings: SetupSettings, setupToken?: string) => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   loading: boolean;
@@ -63,7 +69,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     return Boolean(data.initialized);
   }, []);
 
-  const setupAdmin = useCallback(async (username: string, password: string, setupToken?: string) => {
+  const setupAdmin = useCallback(async (username: string, password: string, settings: SetupSettings, setupToken?: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -73,6 +79,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({
           username,
           password,
+          settings,
           setup_token: setupToken || "",
         }),
       });

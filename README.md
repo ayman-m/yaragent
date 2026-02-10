@@ -31,6 +31,11 @@ docker compose exec -T mcp-server curl -f http://localhost:8001/health
 
 `docker-compose.yml` requires these values (set locally or via GitHub Actions secrets):
 
+- `POSTGRES_USER` (recommended)
+- `POSTGRES_PASSWORD`
+- `POSTGRES_DB` (recommended)
+- `DATABASE_URL` (optional override)
+- `INIT_POSTGRES_DSN` (optional override)
 - `JWT_SECRET_KEY`
 - `ORCHESTRATOR_API_TOKEN` (used by MCP-to-orchestrator calls)
 - `INITIAL_SETUP_TOKEN` (optional for first-run setup hardening)
@@ -62,6 +67,8 @@ docker compose exec -T mcp-server curl -f http://localhost:8001/health
     └──────────────────┘
 
 Browser → Nginx (`https://localhost`) → UI/API (internal TLS)
+
+Setup/auth data and app settings are stored in Postgres (`users.settings_json`) and initialized by the one-shot bootstrap container.
 ```
 
 ## Services

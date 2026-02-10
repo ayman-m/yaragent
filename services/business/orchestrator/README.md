@@ -5,6 +5,8 @@ Endpoints:
 - `GET /setup/status` (public)
 - `POST /auth/setup` (public, first run only)
 - `POST /auth/login` (public)
+- `GET /settings` (JWT/API-token protected)
+- `PUT /settings` (JWT/API-token protected)
 - `GET /agents` (JWT/API-token protected)
 - `POST /push_rule` (JWT/API-token protected)
 - `WS /agent/ws` (agent channel)
@@ -13,11 +15,11 @@ TLS is required in container runtime.
 
 Required env vars:
 - `ORCH_CERT_PRIV`
-- `ORCH_CERT_PUB` (optional, self-signed generated if omitted)
 - `JWT_SECRET_KEY`
+- `DATABASE_URL`
 
 Optional env vars:
+- `ORCH_CERT_PUB` (self-signed generated if omitted)
 - `INITIAL_SETUP_TOKEN`
 - `ORCHESTRATOR_API_TOKEN`
 - `ACCESS_TOKEN_EXPIRE_MINUTES`
-- `AUTH_DATA_FILE` (default `/app/data/auth.json`)

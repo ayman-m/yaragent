@@ -1,6 +1,53 @@
 # Docker Compose orchestration for YARA Agent services
 # TLS is enforced end-to-end: nginx -> ui/orchestrator over HTTPS
 services:
+  postgres:
+    build:
+      context: .
+      dockerfile: services/infra/postgres/Dockerfile
+    container_name: yaragent-postgres
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-yaragent}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - yaragent-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-yaragent}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  init:
+    build:
+      context: .
+      dockerfile: services/platform/bootstrap/Dockerfile
+    container_name: yaragent-init
+    environment:
+      - INIT_POSTGRES_DSN=${INIT_POSTGRES_DSN:-postgresql://postgres:postgres@postgres:5432/yaragent}
+      - INIT_NGINX_RENDER=true
+      - INIT_NGINX_OUTPUT_DIR=/tmp/nginx-generated
+      - INIT_NGINX_SERVER_NAME=${NGINX_SERVER_NAME:-localhost}
+      - INIT_NGINX_UI_UPSTREAM=ui:3000
+      - INIT_NGINX_API_UPSTREAM=orchestrator:8002
+      - INIT_NGINX_MCP_UPSTREAM=mcp-server:8001
+      - INIT_NGINX_API_TIMEOUT_SECONDS=${API_TIMEOUT_SECONDS:-60}
+      - INIT_NGINX_CERT_PRIV=${NGINX_CERT_PRIV}
+      - INIT_NGINX_CERT_PUB=${NGINX_CERT_PUB}
+    volumes:
+      - nginxconf:/tmp/nginx-generated
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - yaragent-net
+    restart: "no"
+
   orchestrator:
     build:
       context: .
@@ -10,6 +57,7 @@ services:
       - "8002"
     environment:
       - LOG_LEVEL=info
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/yaragent}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
@@ -17,9 +65,9 @@ services:
       - ORCHESTRATOR_API_TOKEN=${ORCHESTRATOR_API_TOKEN:-}
       - ORCH_CERT_PRIV=${ORCH_CERT_PRIV}
       - ORCH_CERT_PUB=${ORCH_CERT_PUB}
-      - AUTH_DATA_FILE=/app/data/auth.json
-    volumes:
-      - orchestrator-data:/app/data
+    depends_on:
+      init:
+        condition: service_completed_successfully
     networks:
       - yaragent-net
     restart: unless-stopped
@@ -82,20 +130,26 @@ services:
   nginx:
     build:
       context: .
-      dockerfile: infra/nginx/Dockerfile
+      dockerfile: services/infra/nginx/Dockerfile
     container_name: yaragent-nginx
+    command:
+      - /bin/sh
+      - -c
+      - |
+        cp /etc/nginx-generated/nginx/nginx.conf /etc/nginx/nginx.conf
+        cp /etc/nginx-generated/nginx/conf.d/yaragent.conf /etc/nginx/conf.d/yaragent.conf
+        mkdir -p /etc/nginx/ssl
+        cp /etc/nginx-generated/nginx/ssl/nginx_cert.pem /etc/nginx/ssl/nginx_cert.pem
+        cp /etc/nginx-generated/nginx/ssl/nginx_key.pem /etc/nginx/ssl/nginx_key.pem
+        nginx -g 'daemon off;'
     ports:
       - "80:80"
       - "443:443"
-    environment:
-      - SERVER_NAME=${NGINX_SERVER_NAME:-localhost}
-      - API_TIMEOUT_SECONDS=${API_TIMEOUT_SECONDS:-60}
-      - UI_UPSTREAM=ui:3000
-      - API_UPSTREAM=orchestrator:8002
-      - MCP_UPSTREAM=mcp-server:8001
-      - NGINX_CERT_PRIV=${NGINX_CERT_PRIV}
-      - NGINX_CERT_PUB=${NGINX_CERT_PUB}
+    volumes:
+      - nginxconf:/etc/nginx-generated:ro
     depends_on:
+      init:
+        condition: service_completed_successfully
       orchestrator:
         condition: service_healthy
       ui:
@@ -132,4 +186,5 @@ networks:
     driver: bridge
 
 volumes:
-  orchestrator-data:
+  pgdata:
+  nginxconf:

@@ -21,6 +21,9 @@ export default function Page() {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [setupToken, setSetupToken] = useState("");
+  const [orgName, setOrgName] = useState("YARAgent");
+  const [environment, setEnvironment] = useState("production");
+  const [defaultRuleNamespace, setDefaultRuleNamespace] = useState("default");
 
   useEffect(() => {
     checkSetupStatus()
@@ -45,7 +48,16 @@ export default function Page() {
   const handleSetup = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      await setupAdmin(username, password, setupToken);
+      await setupAdmin(
+        username,
+        password,
+        {
+          org_name: orgName,
+          environment,
+          default_rule_namespace: defaultRuleNamespace,
+        },
+        setupToken
+      );
       setInitialized(true);
     } catch {
       // Error state is handled in context.
@@ -67,7 +79,7 @@ export default function Page() {
 
   if (mode === "setup") {
     return (
-      <Shell title="Initial Setup" subtitle="Create the first administrator account">
+      <Shell title="Initial Setup" subtitle="Create the first administrator account and base settings">
         <AuthForm
           onSubmit={handleSetup}
           username={username}
@@ -76,9 +88,16 @@ export default function Page() {
           setPassword={setPassword}
           setupToken={setupToken}
           setSetupToken={setSetupToken}
+          orgName={orgName}
+          setOrgName={setOrgName}
+          environment={environment}
+          setEnvironment={setEnvironment}
+          defaultRuleNamespace={defaultRuleNamespace}
+          setDefaultRuleNamespace={setDefaultRuleNamespace}
           submitLabel={loading ? "Creating..." : "Create Admin"}
           error={error}
           includeSetupToken
+          includeSettings
         />
       </Shell>
     );
@@ -95,6 +114,12 @@ export default function Page() {
           setPassword={setPassword}
           setupToken={setupToken}
           setSetupToken={setSetupToken}
+          orgName={orgName}
+          setOrgName={setOrgName}
+          environment={environment}
+          setEnvironment={setEnvironment}
+          defaultRuleNamespace={defaultRuleNamespace}
+          setDefaultRuleNamespace={setDefaultRuleNamespace}
           submitLabel={loading ? "Signing In..." : "Sign In"}
           error={error}
         />
@@ -173,9 +198,16 @@ function AuthForm({
   setPassword,
   setupToken,
   setSetupToken,
+  orgName,
+  setOrgName,
+  environment,
+  setEnvironment,
+  defaultRuleNamespace,
+  setDefaultRuleNamespace,
   submitLabel,
   error,
   includeSetupToken = false,
+  includeSettings = false,
 }: {
   onSubmit: (e: FormEvent) => void;
   username: string;
@@ -184,9 +216,16 @@ function AuthForm({
   setPassword: (v: string) => void;
   setupToken: string;
   setSetupToken: (v: string) => void;
+  orgName: string;
+  setOrgName: (v: string) => void;
+  environment: string;
+  setEnvironment: (v: string) => void;
+  defaultRuleNamespace: string;
+  setDefaultRuleNamespace: (v: string) => void;
   submitLabel: string;
   error: string | null;
   includeSetupToken?: boolean;
+  includeSettings?: boolean;
 }) {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
@@ -211,6 +250,37 @@ function AuthForm({
           minLength={8}
         />
       </div>
+      {includeSettings ? (
+        <>
+          <div>
+            <label className="mb-1 block text-sm text-slate-300">Organization Name</label>
+            <input
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
+              required
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-slate-300">Environment</label>
+            <input
+              value={environment}
+              onChange={(e) => setEnvironment(e.target.value)}
+              className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
+              required
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-slate-300">Default Rule Namespace</label>
+            <input
+              value={defaultRuleNamespace}
+              onChange={(e) => setDefaultRuleNamespace(e.target.value)}
+              className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
+              required
+            />
+          </div>
+        </>
+      ) : null}
       {includeSetupToken ? (
         <div>
           <label className="mb-1 block text-sm text-slate-300">Setup Token (optional)</label>

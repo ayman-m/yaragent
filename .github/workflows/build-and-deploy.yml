@@ -7,7 +7,6 @@ on:
     paths:
       - 'services/**'
       - 'agents/**'
-      - 'infra/**'
       - 'docker-compose.yml'
       - '.github/workflows/build-and-deploy.yml'
 
@@ -183,6 +182,11 @@ jobs:
     needs: [build-and-push-orchestrator, build-and-push-mcp-server, build-and-push-ui, build-and-push-agent-poc]
     if: always()
     env:
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      INIT_POSTGRES_DSN: ${{ secrets.INIT_POSTGRES_DSN }}
       JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
       INITIAL_SETUP_TOKEN: ${{ secrets.INITIAL_SETUP_TOKEN }}
       ORCHESTRATOR_API_TOKEN: ${{ secrets.ORCHESTRATOR_API_TOKEN }}
@@ -205,11 +209,15 @@ jobs:
       - name: Validate Required Secrets
         run: |
           required_vars=(
+            POSTGRES_PASSWORD
             JWT_SECRET_KEY
             ORCHESTRATOR_API_TOKEN
             ORCH_CERT_PRIV
+            ORCH_CERT_PUB
             UI_CERT_PRIV
+            UI_CERT_PUB
             NGINX_CERT_PRIV
+            NGINX_CERT_PUB
           )
 
           for v in "${required_vars[@]}"; do
@@ -226,6 +234,23 @@ jobs:
       - name: Wait for Services to be Healthy
         run: |
           echo "Waiting for services to start..."
+
+          INIT_CID=$(docker compose ps -q init)
+          if [ -z "$INIT_CID" ]; then
+            echo "✗ Init container not found"
+            docker compose ps
+            exit 1
+          fi
+
+          INIT_EXIT_CODE=$(docker inspect --format='{{.State.ExitCode}}' "$INIT_CID")
+          if [ "$INIT_EXIT_CODE" != "0" ]; then
+            echo "✗ Init container failed with exit code $INIT_EXIT_CODE"
+            docker compose logs init
+            exit 1
+          fi
+
+          echo "✓ Init container completed successfully"
+
           NGINX_CID=$(docker compose ps -q nginx)
           if [ -z "$NGINX_CID" ]; then
             echo "✗ Nginx container not found"

@@ -3,12 +3,11 @@ import base64
 import json
 import logging
 import os
-import threading
 import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Dict, Optional
 
+import asyncpg
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -32,43 +31,9 @@ JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 INITIAL_SETUP_TOKEN = os.getenv("INITIAL_SETUP_TOKEN", "")
 ORCHESTRATOR_API_TOKEN = os.getenv("ORCHESTRATOR_API_TOKEN", "")
-AUTH_DATA_FILE = Path(os.getenv("AUTH_DATA_FILE", "/app/data/auth.json"))
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@postgres:5432/yaragent")
 
-
-class AuthStore:
-    def __init__(self, auth_file: Path):
-        self.auth_file = auth_file
-        self.lock = threading.Lock()
-
-    def _ensure_parent(self) -> None:
-        self.auth_file.parent.mkdir(parents=True, exist_ok=True)
-
-    def is_initialized(self) -> bool:
-        return self.auth_file.exists()
-
-    def load(self) -> Optional[dict]:
-        if not self.auth_file.exists():
-            return None
-        try:
-            return json.loads(self.auth_file.read_text(encoding="utf-8"))
-        except Exception:
-            logger.exception("failed to read auth data")
-            return None
-
-    def initialize(self, username: str, password_hash: str) -> None:
-        with self.lock:
-            if self.auth_file.exists():
-                raise ValueError("already initialized")
-            self._ensure_parent()
-            payload = {
-                "username": username,
-                "password_hash": password_hash,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            }
-            self.auth_file.write_text(json.dumps(payload), encoding="utf-8")
-
-
-auth_store = AuthStore(AUTH_DATA_FILE)
+_db_pool: Optional[asyncpg.Pool] = None
 
 
 def create_access_token(subject: str) -> str:
@@ -84,7 +49,28 @@ def decode_token(token: str) -> Optional[dict]:
         return None
 
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+async def _db() -> asyncpg.Pool:
+    if _db_pool is None:
+        raise HTTPException(status_code=500, detail="database not initialized")
+    return _db_pool
+
+
+async def _fetch_user_by_username(username: str) -> Optional[asyncpg.Record]:
+    db = await _db()
+    query = "SELECT username, password_hash, settings_json FROM users WHERE username = $1"
+    async with db.acquire() as conn:
+        return await conn.fetchrow(query, username)
+
+
+async def _is_initialized() -> bool:
+    db = await _db()
+    query = "SELECT COUNT(*)::int AS count FROM users"
+    async with db.acquire() as conn:
+        row = await conn.fetchrow(query)
+        return bool(row and row["count"] > 0)
+
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     token = credentials.credentials
 
     if ORCHESTRATOR_API_TOKEN and token == ORCHESTRATOR_API_TOKEN:
@@ -101,13 +87,28 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     if not sub:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
 
+    user = await _fetch_user_by_username(str(sub))
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
     return payload
 
 
 @app.on_event("startup")
 async def startup() -> None:
+    global _db_pool
     if JWT_SECRET_KEY == "change-me":
         logger.warning("JWT_SECRET_KEY is using default value. Set it via environment secret.")
+
+    _db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+
+
+@app.on_event("shutdown")
+async def shutdown() -> None:
+    global _db_pool
+    if _db_pool is not None:
+        await _db_pool.close()
+        _db_pool = None
 
 
 @app.get("/health")
@@ -117,17 +118,19 @@ async def health() -> JSONResponse:
 
 @app.get("/setup/status")
 async def setup_status() -> JSONResponse:
-    return JSONResponse({"initialized": auth_store.is_initialized()})
+    initialized = await _is_initialized()
+    return JSONResponse({"initialized": initialized})
 
 
 @app.post("/auth/setup")
 async def setup_admin(payload: dict) -> JSONResponse:
-    if auth_store.is_initialized():
+    if await _is_initialized():
         raise HTTPException(status_code=409, detail="already initialized")
 
     username = (payload.get("username") or "").strip()
     password = payload.get("password") or ""
     setup_token = payload.get("setup_token") or ""
+    settings = payload.get("settings") or {}
 
     if INITIAL_SETUP_TOKEN and setup_token != INITIAL_SETUP_TOKEN:
         raise HTTPException(status_code=401, detail="invalid setup token")
@@ -138,33 +141,89 @@ async def setup_admin(payload: dict) -> JSONResponse:
     if len(password) < 8:
         raise HTTPException(status_code=400, detail="password must be at least 8 characters")
 
+    if not isinstance(settings, dict):
+        raise HTTPException(status_code=400, detail="settings must be an object")
+
+    db = await _db()
     password_hash = pwd_context.hash(password)
+
     try:
-        auth_store.initialize(username=username, password_hash=password_hash)
-    except ValueError:
+        async with db.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO users (username, password_hash, role, settings_json)
+                VALUES ($1, $2, 'admin', $3::jsonb)
+                """,
+                username,
+                password_hash,
+                json.dumps(settings),
+            )
+    except asyncpg.UniqueViolationError:
         raise HTTPException(status_code=409, detail="already initialized")
 
     token = create_access_token(subject=username)
-    return JSONResponse({"access_token": token, "token_type": "bearer", "username": username})
+    return JSONResponse(
+        {
+            "access_token": token,
+            "token_type": "bearer",
+            "username": username,
+            "settings": settings,
+        }
+    )
 
 
 @app.post("/auth/login")
 async def login(payload: dict) -> JSONResponse:
-    if not auth_store.is_initialized():
+    if not await _is_initialized():
         raise HTTPException(status_code=412, detail="setup required")
 
     username = (payload.get("username") or "").strip()
     password = payload.get("password") or ""
 
-    data = auth_store.load()
-    if data is None:
-        raise HTTPException(status_code=500, detail="auth store unavailable")
-
-    if username != data.get("username") or not pwd_context.verify(password, data.get("password_hash", "")):
+    user = await _fetch_user_by_username(username)
+    if user is None or not pwd_context.verify(password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="invalid username or password")
 
+    db = await _db()
+    async with db.acquire() as conn:
+        await conn.execute("UPDATE users SET last_login = now() WHERE username = $1", username)
+
     token = create_access_token(subject=username)
-    return JSONResponse({"access_token": token, "token_type": "bearer", "username": username})
+    return JSONResponse(
+        {
+            "access_token": token,
+            "token_type": "bearer",
+            "username": username,
+            "settings": user.get("settings_json") or {},
+        }
+    )
+
+
+@app.get("/settings")
+async def get_settings(user: dict = Depends(get_current_user)) -> JSONResponse:
+    username = str(user["sub"])
+    row = await _fetch_user_by_username(username)
+    if row is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    return JSONResponse({"settings": row.get("settings_json") or {}})
+
+
+@app.put("/settings")
+async def update_settings(payload: dict, user: dict = Depends(get_current_user)) -> JSONResponse:
+    settings = payload.get("settings")
+    if not isinstance(settings, dict):
+        raise HTTPException(status_code=400, detail="settings must be an object")
+
+    username = str(user["sub"])
+    db = await _db()
+    async with db.acquire() as conn:
+        await conn.execute(
+            "UPDATE users SET settings_json = $2::jsonb WHERE username = $1",
+            username,
+            json.dumps(settings),
+        )
+
+    return JSONResponse({"settings": settings})
 
 
 @app.get("/agents")
