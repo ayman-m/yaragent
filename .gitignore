@@ -1,1 +1,8 @@
 agent-poc
+agents/windows-go/poc/poc
+tem_keys.md
+
+# Snyk Security Extension - AI Rules (auto-generated)
+.github/instructions/snyk_rules.instructions.md
+
+ref_projects/*
