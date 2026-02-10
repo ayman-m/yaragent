@@ -59,8 +59,11 @@ def render_nginx_assets() -> None:
         rendered = _render_template(tmpl.read_text(encoding="utf-8"))
         _write(nginx_out / out_rel, rendered)
 
-    _write(nginx_out / "ssl/nginx_key.pem", NGINX_CERT_PRIV)
-    _write(nginx_out / "ssl/nginx_cert.pem", NGINX_CERT_PUB)
+    # Accept both real multiline PEM and escaped \n secrets.
+    priv_text = NGINX_CERT_PRIV.replace("\\n", "\n").strip() + "\n"
+    pub_text = NGINX_CERT_PUB.replace("\\n", "\n").strip() + "\n"
+    _write(nginx_out / "ssl/nginx_key.pem", priv_text)
+    _write(nginx_out / "ssl/nginx_cert.pem", pub_text)
 
 
 def _wait_for_postgres(max_attempts: int = 60, sleep_seconds: float = 2.0) -> None:

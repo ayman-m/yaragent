@@ -137,6 +137,7 @@ services:
       - -c
       - |
         cp /etc/nginx-generated/nginx/nginx.conf /etc/nginx/nginx.conf
+        rm -f /etc/nginx/conf.d/*.conf
         cp /etc/nginx-generated/nginx/conf.d/yaragent.conf /etc/nginx/conf.d/yaragent.conf
         mkdir -p /etc/nginx/ssl
         cp /etc/nginx-generated/nginx/ssl/nginx_cert.pem /etc/nginx/ssl/nginx_cert.pem
