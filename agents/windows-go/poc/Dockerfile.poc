@@ -3,7 +3,7 @@ WORKDIR /app
 COPY agents/windows-go/poc/main.go .
 COPY agents/windows-go/poc/compile_stub.go .
 COPY agents/windows-go/poc/go.mod .
-COPY agents/windows-go/poc/go.sum . || true
+COPY agents/windows-go/poc/go.sum .
 RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -o agent-poc
 
