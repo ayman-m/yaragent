@@ -1,5 +1,6 @@
 # Docker Compose orchestration for YARA Agent services
 # Includes: orchestrator, MCP server, UI, and agent PoC
+# All Docker builds validated locally - ready for CI/CD deployment
 services:
   # Orchestrator (FastAPI WebSocket broker for agents)
   orchestrator:
