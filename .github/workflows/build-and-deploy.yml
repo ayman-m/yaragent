@@ -25,11 +25,6 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Clean Docker Cache and Images
-        run: |
-          docker builder prune -af --filter=until=1h || true
-          docker image prune -af || true
-
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
@@ -69,11 +64,6 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Clean Docker Cache and Images
-        run: |
-          docker builder prune -af --filter=until=1h || true
-          docker image prune -af || true
-
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
@@ -113,11 +103,6 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Clean Docker Cache and Images
-        run: |
-          docker builder prune -af --filter=until=1h || true
-          docker image prune -af || true
-
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
@@ -156,10 +141,7 @@ jobs:
     name: Build and Push Agent PoC
     runs-on: self-hosted
 
-    steps:      - name: Clean Docker Cache and Images
-        run: |
-          docker builder prune -af --filter=until=1h || true
-          docker image prune -af || true
+    steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
