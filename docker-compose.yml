@@ -18,8 +18,9 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/agents"]
       interval: 10s
-      timeout: 5s
-      retries: 3
+      timeout: 10s
+      retries: 5
+      start_period: 15s
 
   # MCP Server (MCP Protocol + tools for AI agents)
   mcp-server:
@@ -41,8 +42,9 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 10s
-      timeout: 5s
-      retries: 3
+      timeout: 10s
+      retries: 5
+      start_period: 15s
 
   # UI (Next.js dashboard)
   ui:
