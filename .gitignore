@@ -7,3 +7,5 @@ ref_projects/*
 myideas.txt
 plans/*
 start_tunnels.sh
+.yaragent-tunnels/*
+*pycache*
