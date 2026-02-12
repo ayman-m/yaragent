@@ -17,11 +17,20 @@ OBS_RENDER_ENABLED = os.getenv("INIT_OBSERVABILITY_RENDER", "true").lower() == "
 OBS_LOKI_RETENTION_PERIOD = os.getenv("INIT_OBSERVABILITY_LOKI_RETENTION_PERIOD", "168h")
 OBS_LOKI_MAX_QUERY_LENGTH = os.getenv("INIT_OBSERVABILITY_LOKI_MAX_QUERY_LENGTH", "168h")
 
+KEYCLOAK_TEMPLATES_DIR = Path("/app/bootstrap/keycloak/templates")
+KEYCLOAK_OUTPUT_DIR = Path(os.getenv("INIT_KEYCLOAK_OUTPUT_DIR", "/tmp/keycloak-generated"))
+KEYCLOAK_RENDER_ENABLED = os.getenv("INIT_KEYCLOAK_RENDER", "true").lower() == "true"
+KEYCLOAK_OAUTH2_CLIENT_SECRET = os.getenv("INIT_KEYCLOAK_OAUTH2_CLIENT_SECRET", "yaragent-client-secret-change-me")
+KEYCLOAK_REDIRECT_URI = os.getenv("INIT_KEYCLOAK_REDIRECT_URI", "https://localhost/oauth2/callback")
+KEYCLOAK_DEMO_USER = os.getenv("INIT_KEYCLOAK_DEMO_USER", "yaradmin")
+KEYCLOAK_DEMO_PASSWORD = os.getenv("INIT_KEYCLOAK_DEMO_PASSWORD", "yaradmin123!")
+
 SERVER_NAME = os.getenv("INIT_NGINX_SERVER_NAME", "localhost")
 UI_UPSTREAM = os.getenv("INIT_NGINX_UI_UPSTREAM", "ui:3000")
 API_UPSTREAM = os.getenv("INIT_NGINX_API_UPSTREAM", "orchestrator:8002")
 MCP_UPSTREAM = os.getenv("INIT_NGINX_MCP_UPSTREAM", "mcp-server:8001")
 GRAFANA_UPSTREAM = os.getenv("INIT_NGINX_GRAFANA_UPSTREAM", "grafana:3000")
+OAUTH2_PROXY_UPSTREAM = os.getenv("INIT_NGINX_OAUTH2_PROXY_UPSTREAM", "oauth2-proxy:4180")
 API_TIMEOUT_SECONDS = os.getenv("INIT_NGINX_API_TIMEOUT_SECONDS", "60")
 
 NGINX_CERT_PRIV = os.getenv("INIT_NGINX_CERT_PRIV", "")
@@ -62,6 +71,7 @@ def _render_template(raw: str) -> str:
         "${API_UPSTREAM}": API_UPSTREAM,
         "${MCP_UPSTREAM}": MCP_UPSTREAM,
         "${GRAFANA_UPSTREAM}": GRAFANA_UPSTREAM,
+        "${OAUTH2_PROXY_UPSTREAM}": OAUTH2_PROXY_UPSTREAM,
         "${API_TIMEOUT_SECONDS}": API_TIMEOUT_SECONDS,
         "${NGINX_CERT_FILE}": "/etc/nginx/ssl/nginx_cert.pem",
         "${NGINX_KEY_FILE}": "/etc/nginx/ssl/nginx_key.pem",
@@ -109,6 +119,24 @@ def render_observability_assets() -> None:
         for key, val in replacements.items():
             rendered = rendered.replace(key, val)
         _write(OBS_OUTPUT_DIR / out_rel, rendered)
+
+
+def render_keycloak_assets() -> None:
+    if not KEYCLOAK_TEMPLATES_DIR.exists():
+        return
+    replacements = {
+        "${KEYCLOAK_OAUTH2_CLIENT_SECRET}": KEYCLOAK_OAUTH2_CLIENT_SECRET,
+        "${KEYCLOAK_REDIRECT_URI}": KEYCLOAK_REDIRECT_URI,
+        "${KEYCLOAK_DEMO_USER}": KEYCLOAK_DEMO_USER,
+        "${KEYCLOAK_DEMO_PASSWORD}": KEYCLOAK_DEMO_PASSWORD,
+    }
+    for tmpl in KEYCLOAK_TEMPLATES_DIR.rglob("*.template"):
+        rel = tmpl.relative_to(KEYCLOAK_TEMPLATES_DIR)
+        out_rel = rel.with_suffix("")
+        rendered = tmpl.read_text(encoding="utf-8")
+        for key, val in replacements.items():
+            rendered = rendered.replace(key, val)
+        _write(KEYCLOAK_OUTPUT_DIR / out_rel, rendered)
 
 
 def _wait_for_postgres(max_attempts: int = 60, sleep_seconds: float = 2.0) -> None:
@@ -191,7 +219,12 @@ def main() -> None:
         render_observability_assets()
         print(f"[init] observability assets rendered to {OBS_OUTPUT_DIR}")
 
-    if not RENDER_ENABLED and not OBS_RENDER_ENABLED:
+    if KEYCLOAK_RENDER_ENABLED:
+        KEYCLOAK_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        render_keycloak_assets()
+        print(f"[init] keycloak assets rendered to {KEYCLOAK_OUTPUT_DIR}")
+
+    if not RENDER_ENABLED and not OBS_RENDER_ENABLED and not KEYCLOAK_RENDER_ENABLED:
         print("[init] render disabled; nothing else to do")
 
 

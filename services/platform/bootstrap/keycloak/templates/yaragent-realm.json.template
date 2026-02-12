@@ -1,0 +1,38 @@
+{
+  "realm": "yaragent",
+  "enabled": true,
+  "displayName": "YARAgent Realm",
+  "clients": [
+    {
+      "clientId": "yaragent-oauth2-proxy",
+      "name": "YARAgent oauth2-proxy",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${KEYCLOAK_OAUTH2_CLIENT_SECRET}",
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "redirectUris": [
+        "${KEYCLOAK_REDIRECT_URI}"
+      ],
+      "webOrigins": ["*"]
+    }
+  ],
+  "users": [
+    {
+      "username": "${KEYCLOAK_DEMO_USER}",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "YAR",
+      "lastName": "Admin",
+      "email": "yaradmin@example.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KEYCLOAK_DEMO_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

@@ -42,6 +42,7 @@ services:
       - INIT_NGINX_API_UPSTREAM=orchestrator:8002
       - INIT_NGINX_MCP_UPSTREAM=mcp-server:8001
       - INIT_NGINX_GRAFANA_UPSTREAM=grafana:3000
+      - INIT_NGINX_OAUTH2_PROXY_UPSTREAM=oauth2-proxy:4180
       - INIT_NGINX_API_TIMEOUT_SECONDS=${API_TIMEOUT_SECONDS:-60}
       - INIT_NGINX_CERT_PRIV=${NGINX_CERT_PRIV}
       - INIT_NGINX_CERT_PUB=${NGINX_CERT_PUB}
@@ -49,9 +50,16 @@ services:
       - INIT_OBSERVABILITY_OUTPUT_DIR=/tmp/observability-generated
       - INIT_OBSERVABILITY_LOKI_RETENTION_PERIOD=${INIT_OBSERVABILITY_LOKI_RETENTION_PERIOD:-168h}
       - INIT_OBSERVABILITY_LOKI_MAX_QUERY_LENGTH=${INIT_OBSERVABILITY_LOKI_MAX_QUERY_LENGTH:-168h}
+      - INIT_KEYCLOAK_RENDER=${INIT_KEYCLOAK_RENDER:-true}
+      - INIT_KEYCLOAK_OUTPUT_DIR=/tmp/keycloak-generated
+      - INIT_KEYCLOAK_OAUTH2_CLIENT_SECRET=${INIT_KEYCLOAK_OAUTH2_CLIENT_SECRET:-yaragent-client-secret-change-me}
+      - INIT_KEYCLOAK_REDIRECT_URI=${INIT_KEYCLOAK_REDIRECT_URI:-https://localhost/oauth2/callback}
+      - INIT_KEYCLOAK_DEMO_USER=${INIT_KEYCLOAK_DEMO_USER:-yaradmin}
+      - INIT_KEYCLOAK_DEMO_PASSWORD=${INIT_KEYCLOAK_DEMO_PASSWORD:-yaradmin123!}
     volumes:
       - nginxconf:/tmp/nginx-generated
       - observabilityconf:/tmp/observability-generated
+      - keycloakconf:/tmp/keycloak-generated
     depends_on:
       postgres:
         condition: service_healthy
@@ -176,6 +184,10 @@ services:
         condition: service_healthy
       grafana:
         condition: service_started
+      oauth2-proxy:
+        condition: service_started
+      keycloak:
+        condition: service_started
     networks:
       - yaragent-net
     restart: unless-stopped
@@ -206,7 +218,9 @@ services:
     restart: unless-stopped
 
   loki:
-    image: grafana/loki:3.1.1
+    build:
+      context: .
+      dockerfile: services/infra/observability/loki/Dockerfile
     container_name: yaragent-loki
     command: ["-config.file=/etc/yaragent-observability/loki/config.yml"]
     ports:
@@ -222,7 +236,9 @@ services:
     restart: unless-stopped
 
   alloy:
-    image: grafana/alloy:v1.4.2
+    build:
+      context: .
+      dockerfile: services/infra/observability/alloy/Dockerfile
     container_name: yaragent-alloy
     command: ["run", "/etc/yaragent-observability/alloy/config.alloy"]
     ports:
@@ -240,7 +256,9 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:11.1.4
+    build:
+      context: .
+      dockerfile: services/infra/observability/grafana/Dockerfile
     container_name: yaragent-grafana
     ports:
       - "127.0.0.1:3001:3000"
@@ -253,6 +271,12 @@ services:
       - GF_SECURITY_COOKIE_SECURE=true
       - GF_SERVER_ROOT_URL=https://${NGINX_SERVER_NAME:-localhost}/grafana
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_AUTH_BASIC_ENABLED=false
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_AUTH_PROXY_ENABLED=true
+      - GF_AUTH_PROXY_HEADER_NAME=X-Forwarded-User
+      - GF_AUTH_PROXY_HEADER_PROPERTY=username
+      - GF_AUTH_PROXY_AUTO_SIGN_UP=true
       - GF_PATHS_PROVISIONING=/etc/yaragent-observability/grafana/provisioning
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/yaragent-observability/grafana/dashboards/yaragent-telemetry-overview.json
     volumes:
@@ -267,6 +291,58 @@ services:
       - yaragent-net
     restart: unless-stopped
 
+  oauth2-proxy:
+    build:
+      context: .
+      dockerfile: services/infra/security/oauth2-proxy/Dockerfile
+    container_name: yaragent-oauth2-proxy
+    command:
+      - --http-address=0.0.0.0:4180
+      - --reverse-proxy=true
+      - --provider=oidc
+      - --oidc-issuer-url=${OAUTH2_PROXY_OIDC_ISSUER_URL:-http://keycloak:8080/realms/yaragent}
+      - --client-id=${OAUTH2_PROXY_CLIENT_ID:-yaragent-oauth2-proxy}
+      - --client-secret=${OAUTH2_PROXY_CLIENT_SECRET:-yaragent-client-secret-change-me}
+      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET:-MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
+      - --redirect-url=${OAUTH2_PROXY_REDIRECT_URL:-https://localhost/oauth2/callback}
+      - --email-domain=*
+      - --set-xauthrequest=true
+      - --pass-user-headers=true
+      - --cookie-secure=true
+      - --cookie-samesite=lax
+      - --scope=openid profile email
+      - --upstream=file:///dev/null
+      - --skip-provider-button=true
+    expose:
+      - "4180"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    networks:
+      - yaragent-net
+    restart: unless-stopped
+
+  keycloak:
+    build:
+      context: .
+      dockerfile: services/infra/security/keycloak/Dockerfile
+    container_name: yaragent-keycloak
+    command: ["start-dev", "--http-port=8080", "--hostname-strict=false", "--import-realm"]
+    environment:
+      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - keycloakconf:/opt/keycloak/data/import:ro
+      - keycloakdata:/opt/keycloak/data
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    networks:
+      - yaragent-net
+    restart: unless-stopped
+
 networks:
   yaragent-net:
     driver: bridge
@@ -275,5 +351,7 @@ volumes:
   pgdata:
   nginxconf:
   observabilityconf:
+  keycloakconf:
   lokidata:
   grafanadata:
+  keycloakdata:
