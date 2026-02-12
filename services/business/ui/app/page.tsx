@@ -3,6 +3,8 @@
 import { Agent, useAgents } from "@/components/agent-context";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+type NavSection = "overview" | "agents" | "telemetry" | "alerts";
+
 export default function Page() {
   const {
     agents,
@@ -25,6 +27,7 @@ export default function Page() {
   const [orgName, setOrgName] = useState("YARAgent");
   const [environment, setEnvironment] = useState("production");
   const [defaultRuleNamespace, setDefaultRuleNamespace] = useState("default");
+  const [activeSection, setActiveSection] = useState<NavSection>("overview");
 
   useEffect(() => {
     checkSetupStatus()
@@ -57,6 +60,14 @@ export default function Page() {
   const connectedCount = useMemo(() => agents.filter((a) => a.status === "connected").length, [agents]);
   const staleCount = useMemo(() => agents.filter((a) => a.status === "stale").length, [agents]);
   const disconnectedCount = useMemo(() => agents.filter((a) => a.status === "disconnected").length, [agents]);
+
+  const navigateToSection = (section: NavSection) => {
+    setActiveSection(section);
+    const node = document.getElementById(`section-${section}`);
+    if (node) {
+      node.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
 
   const handleSetup = async (e: FormEvent) => {
     e.preventDefault();
@@ -141,8 +152,8 @@ export default function Page() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="flex min-h-screen">
+    <div className="h-screen bg-slate-950 text-slate-100">
+      <div className="flex h-screen">
         <aside className="hidden w-72 border-r border-slate-800 bg-slate-900/80 p-4 backdrop-blur md:flex md:flex-col">
           <div className="mb-8 rounded-xl border border-slate-800 bg-slate-900 px-4 py-5">
             <p className="text-xs uppercase tracking-[0.18em] text-slate-400">YARAgent</p>
@@ -151,10 +162,30 @@ export default function Page() {
           </div>
 
           <nav className="space-y-2">
-            <SidebarItem title="Overview" subtitle="Fleet posture" active />
-            <SidebarItem title="Agents" subtitle="Connectivity and control" />
-            <SidebarItem title="Telemetry" subtitle="Logs and observability" />
-            <SidebarItem title="Alerts" subtitle="Finding and error spikes" />
+            <SidebarItem
+              title="Overview"
+              subtitle="Fleet posture"
+              active={activeSection === "overview"}
+              onClick={() => navigateToSection("overview")}
+            />
+            <SidebarItem
+              title="Agents"
+              subtitle="Connectivity and control"
+              active={activeSection === "agents"}
+              onClick={() => navigateToSection("agents")}
+            />
+            <SidebarItem
+              title="Telemetry"
+              subtitle="Logs and observability"
+              active={activeSection === "telemetry"}
+              onClick={() => navigateToSection("telemetry")}
+            />
+            <SidebarItem
+              title="Alerts"
+              subtitle="Finding and error spikes"
+              active={activeSection === "alerts"}
+              onClick={() => navigateToSection("alerts")}
+            />
           </nav>
 
           <div className="mt-auto rounded-xl border border-slate-800 bg-slate-900 p-4">
@@ -187,8 +218,8 @@ export default function Page() {
             </div>
           </header>
 
-          <main className="flex-1 overflow-auto p-4 md:p-8">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <main className="flex-1 overflow-y-auto p-4 md:p-8">
+            <div id="section-overview" className="grid scroll-mt-6 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard label="Total Agents" value={agents.length} tone="slate" />
               <MetricCard label="Connected" value={connectedCount} tone="green" />
               <MetricCard label="Stale" value={staleCount} tone="amber" />
@@ -201,7 +232,7 @@ export default function Page() {
               </div>
             )}
 
-            <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div id="section-agents" className="mt-6 grid scroll-mt-6 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
               <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 md:p-6">
                 <div className="mb-4 flex items-center justify-between gap-4">
                   <div>
@@ -249,7 +280,7 @@ export default function Page() {
               </aside>
             </div>
 
-            <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 md:p-6">
+            <section id="section-telemetry" className="mt-6 scroll-mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 md:p-6">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-semibold">Telemetry Dashboard</h2>
@@ -273,6 +304,13 @@ export default function Page() {
                 />
               </div>
             </section>
+
+            <section id="section-alerts" className="mt-6 scroll-mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 md:p-6">
+              <h2 className="text-xl font-semibold">Alert Summary</h2>
+              <p className="mt-2 text-sm text-slate-400">
+                Alerting is fed by Grafana rules. Use the telemetry dashboard to configure thresholds and notification routes.
+              </p>
+            </section>
           </main>
         </div>
       </div>
@@ -280,9 +318,21 @@ export default function Page() {
   );
 }
 
-function SidebarItem({ title, subtitle, active = false }: { title: string; subtitle: string; active?: boolean }) {
+function SidebarItem({
+  title,
+  subtitle,
+  active = false,
+  onClick,
+}: {
+  title: string;
+  subtitle: string;
+  active?: boolean;
+  onClick?: () => void;
+}) {
   return (
     <button
+      type="button"
+      onClick={onClick}
       className={`w-full rounded-xl border px-3 py-3 text-left transition ${
         active
           ? "border-slate-600 bg-slate-800 text-slate-100"

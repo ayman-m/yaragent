@@ -16,8 +16,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full overflow-hidden">
-      <body className="h-full overflow-hidden bg-slate-950 font-sans text-slate-100">
+    <html lang="en" className="h-full">
+      <body className="h-full bg-slate-950 font-sans text-slate-100">
         <AgentProvider>{children}</AgentProvider>
       </body>
     </html>
