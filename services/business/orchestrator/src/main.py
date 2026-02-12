@@ -102,10 +102,14 @@ async def _upsert_agent_control_state(
                 last_policy_result, updated_at
             )
             VALUES (
-                $1, COALESCE($2, 'default'), COALESCE($3, 'disconnected'), $4, $5, $6,
-                COALESCE($7::jsonb, '{}'::jsonb), $8, $9,
-                CASE WHEN $8 IS NOT NULL OR $9 IS NOT NULL OR $10 IS NOT NULL THEN now() ELSE NULL END,
-                $10, now()
+                $1::text, COALESCE($2::text, 'default'), COALESCE($3::text, 'disconnected'),
+                $4::timestamptz, $5::timestamptz, $6::timestamptz,
+                COALESCE($7::jsonb, '{}'::jsonb), $8::text, $9::text,
+                CASE
+                    WHEN $8::text IS NOT NULL OR $9::text IS NOT NULL OR $10::text IS NOT NULL THEN now()
+                    ELSE NULL
+                END,
+                $10::text, now()
             )
             ON CONFLICT (agent_id) DO UPDATE SET
                 tenant_id = COALESCE(EXCLUDED.tenant_id, agents_control_state.tenant_id),
