@@ -1,0 +1,86 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(count_over_time({service=\"yaragent-agent-poc\"}[5m]))",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "Events Last 5m",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(count_over_time({service=\"yaragent-agent-poc\",severity=\"error\"}[5m]))",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "Errors Last 5m",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 7},
+      "id": 3,
+      "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "single", "sort": "none"}},
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (event_type) (count_over_time({service=\"yaragent-agent-poc\"}[5m]))",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Events by Type (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 15},
+      "id": 4,
+      "options": {"dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": true, "showCommonLabels": false, "showLabels": true, "sortOrder": "Descending", "wrapLogMessage": true},
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "{service=\"yaragent-agent-poc\"}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Agent Telemetry Logs",
+      "type": "logs"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["yaragent", "telemetry"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "YARAgent Telemetry Overview",
+  "uid": "yaragent-telemetry-overview",
+  "version": 2,
+  "weekStart": ""
+}

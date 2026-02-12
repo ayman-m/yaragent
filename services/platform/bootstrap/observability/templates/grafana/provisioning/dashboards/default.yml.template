@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: YARAgent Dashboards
+    orgId: 1
+    folder: YARAgent
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/yaragent-observability/grafana/dashboards

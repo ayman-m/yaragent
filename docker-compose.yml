@@ -35,17 +35,23 @@ services:
       - INIT_POSTGRES_USER=${POSTGRES_USER:-postgres}
       - INIT_POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - INIT_POSTGRES_DB=${POSTGRES_DB:-yaragent}
-      - INIT_NGINX_RENDER=true
+      - INIT_NGINX_RENDER=${INIT_NGINX_RENDER:-true}
       - INIT_NGINX_OUTPUT_DIR=/tmp/nginx-generated
       - INIT_NGINX_SERVER_NAME=${NGINX_SERVER_NAME:-localhost}
       - INIT_NGINX_UI_UPSTREAM=ui:3000
       - INIT_NGINX_API_UPSTREAM=orchestrator:8002
       - INIT_NGINX_MCP_UPSTREAM=mcp-server:8001
+      - INIT_NGINX_GRAFANA_UPSTREAM=grafana:3000
       - INIT_NGINX_API_TIMEOUT_SECONDS=${API_TIMEOUT_SECONDS:-60}
       - INIT_NGINX_CERT_PRIV=${NGINX_CERT_PRIV}
       - INIT_NGINX_CERT_PUB=${NGINX_CERT_PUB}
+      - INIT_OBSERVABILITY_RENDER=${INIT_OBSERVABILITY_RENDER:-true}
+      - INIT_OBSERVABILITY_OUTPUT_DIR=/tmp/observability-generated
+      - INIT_OBSERVABILITY_LOKI_RETENTION_PERIOD=${INIT_OBSERVABILITY_LOKI_RETENTION_PERIOD:-168h}
+      - INIT_OBSERVABILITY_LOKI_MAX_QUERY_LENGTH=${INIT_OBSERVABILITY_LOKI_MAX_QUERY_LENGTH:-168h}
     volumes:
       - nginxconf:/tmp/nginx-generated
+      - observabilityconf:/tmp/observability-generated
     depends_on:
       postgres:
         condition: service_healthy
@@ -122,6 +128,7 @@ services:
       - "3000"
     environment:
       - NEXT_PUBLIC_API_BASE=/api
+      - NEXT_PUBLIC_GRAFANA_DASHBOARD_URL=/grafana/d/yaragent-telemetry-overview?orgId=1&kiosk
       - UI_CERT_PRIV=${UI_CERT_PRIV}
       - UI_CERT_PUB=${UI_CERT_PUB}
     depends_on:
@@ -167,6 +174,8 @@ services:
         condition: service_healthy
       mcp-server:
         condition: service_healthy
+      grafana:
+        condition: service_started
     networks:
       - yaragent-net
     restart: unless-stopped
@@ -185,9 +194,75 @@ services:
     command: ["--url", "wss://orchestrator:8002/agent/ws"]
     environment:
       - ENROLL_TOKEN=poc-test-token
+      - TELEMETRY_ENABLED=${AGENT_TELEMETRY_ENABLED:-false}
+      - TELEMETRY_PUSH_URL=${AGENT_TELEMETRY_PUSH_URL:-http://alloy:9999/loki/api/v1/push}
+      - TENANT_ID=${AGENT_TENANT_ID:-default}
+      - DEPLOY_ENV=${AGENT_DEPLOY_ENV:-dev}
     depends_on:
       orchestrator:
         condition: service_healthy
+    networks:
+      - yaragent-net
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.1.1
+    container_name: yaragent-loki
+    command: ["-config.file=/etc/yaragent-observability/loki/config.yml"]
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - observabilityconf:/etc/yaragent-observability:ro
+      - lokidata:/loki
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    networks:
+      - yaragent-net
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.4.2
+    container_name: yaragent-alloy
+    command: ["run", "/etc/yaragent-observability/alloy/config.alloy"]
+    ports:
+      - "127.0.0.1:9999:9999"
+    volumes:
+      - observabilityconf:/etc/yaragent-observability:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      loki:
+        condition: service_started
+    networks:
+      - yaragent-net
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    container_name: yaragent-grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SECURITY_COOKIE_SECURE=true
+      - GF_SERVER_ROOT_URL=https://${NGINX_SERVER_NAME:-localhost}/grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_PATHS_PROVISIONING=/etc/yaragent-observability/grafana/provisioning
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/yaragent-observability/grafana/dashboards/yaragent-telemetry-overview.json
+    volumes:
+      - observabilityconf:/etc/yaragent-observability:ro
+      - grafanadata:/var/lib/grafana
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      loki:
+        condition: service_started
     networks:
       - yaragent-net
     restart: unless-stopped
@@ -199,3 +274,6 @@ networks:
 volumes:
   pgdata:
   nginxconf:
+  observabilityconf:
+  lokidata:
+  grafanadata:

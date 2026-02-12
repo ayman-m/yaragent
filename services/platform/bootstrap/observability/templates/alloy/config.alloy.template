@@ -1,0 +1,30 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+loki.source.api "yaragent_telemetry" {
+  http {
+    listen_address = "0.0.0.0"
+    listen_port    = 9999
+  }
+
+  labels = {
+    source = "agent-telemetry",
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.source.docker "yaragent_control_plane" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = [{container_name = "yaragent-orchestrator"}]
+  labels     = {source = "control-plane", service = "yaragent-orchestrator"}
+  forward_to = [loki.write.default.receiver]
+}

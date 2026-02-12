@@ -15,3 +15,4 @@ Required env vars for container TLS:
 
 Useful env vars:
 - `NEXT_PUBLIC_API_BASE` (default `/api`)
+- `NEXT_PUBLIC_GRAFANA_DASHBOARD_URL` (default `/grafana/d/yaragent-telemetry-overview?orgId=1&kiosk`)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useAgents } from "@/components/agent-context";
+import { Agent, useAgents } from "@/components/agent-context";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 export default function Page() {
@@ -51,6 +51,12 @@ export default function Page() {
     if (!token) return "login";
     return "dashboard";
   }, [initialized, token]);
+  const grafanaDashboardUrl =
+    process.env.NEXT_PUBLIC_GRAFANA_DASHBOARD_URL || "/grafana/d/yaragent-telemetry-overview?orgId=1&kiosk";
+
+  const connectedCount = useMemo(() => agents.filter((a) => a.status === "connected").length, [agents]);
+  const staleCount = useMemo(() => agents.filter((a) => a.status === "stale").length, [agents]);
+  const disconnectedCount = useMemo(() => agents.filter((a) => a.status === "disconnected").length, [agents]);
 
   const handleSetup = async (e: FormEvent) => {
     e.preventDefault();
@@ -135,52 +141,181 @@ export default function Page() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900 px-8 py-6">
-        <div className="flex items-start justify-between gap-6">
-          <div>
-            <h1 className="text-3xl font-bold">YARA Agent Control</h1>
-            <p className="mt-2 text-sm text-slate-400">Manage scanning agents and push YARA rules</p>
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="flex min-h-screen">
+        <aside className="hidden w-72 border-r border-slate-800 bg-slate-900/80 p-4 backdrop-blur md:flex md:flex-col">
+          <div className="mb-8 rounded-xl border border-slate-800 bg-slate-900 px-4 py-5">
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">YARAgent</p>
+            <h2 className="mt-2 text-lg font-semibold">Control Center</h2>
+            <p className="mt-1 text-xs text-slate-400">Control plane + telemetry operations</p>
           </div>
-          <button
-            onClick={logout}
-            className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-800"
-          >
-            Sign Out
-          </button>
-        </div>
-      </header>
 
-      <main className="flex-1 overflow-auto p-8">
-        <div className="mb-8 rounded-lg bg-slate-900 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-400">Connected Agents</p>
-              <p className="text-2xl font-bold">{agents.length}</p>
-            </div>
+          <nav className="space-y-2">
+            <SidebarItem title="Overview" subtitle="Fleet posture" active />
+            <SidebarItem title="Agents" subtitle="Connectivity and control" />
+            <SidebarItem title="Telemetry" subtitle="Logs and observability" />
+            <SidebarItem title="Alerts" subtitle="Finding and error spikes" />
+          </nav>
+
+          <div className="mt-auto rounded-xl border border-slate-800 bg-slate-900 p-4">
+            <p className="text-xs uppercase tracking-widest text-slate-500">Session</p>
+            <p className="mt-2 text-sm text-slate-300">Authenticated operator</p>
             <button
-              onClick={refreshAgents}
-              disabled={loading}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              onClick={logout}
+              className="mt-4 w-full rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-800"
             >
-              {loading ? "Refreshing..." : "Refresh"}
+              Sign Out
             </button>
           </div>
-          {error && <p className="mt-4 text-sm text-red-400">Error: {error}</p>}
-        </div>
+        </aside>
 
-        {agents.length === 0 ? (
-          <div className="rounded-lg border border-slate-800 bg-slate-900 p-8 text-center">
-            <p className="text-slate-400">{loading ? "Loading agents..." : "No agents connected"}</p>
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {agents.map((agent) => (
-              <AgentCard key={agent.id} agent={agent} onPushRule={pushRule} />
-            ))}
-          </div>
-        )}
-      </main>
+        <div className="flex flex-1 flex-col">
+          <header className="border-b border-slate-800 bg-slate-900/70 px-4 py-4 backdrop-blur md:px-8">
+            <div className="flex items-start justify-between gap-6">
+              <div>
+                <h1 className="text-2xl font-bold md:text-3xl">YARA Agent Control</h1>
+                <p className="mt-1 text-sm text-slate-400">Manage endpoint state, policy push, and telemetry flow</p>
+              </div>
+              <div className="md:hidden">
+                <button
+                  onClick={logout}
+                  className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-800"
+                >
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 overflow-auto p-4 md:p-8">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <MetricCard label="Total Agents" value={agents.length} tone="slate" />
+              <MetricCard label="Connected" value={connectedCount} tone="green" />
+              <MetricCard label="Stale" value={staleCount} tone="amber" />
+              <MetricCard label="Disconnected" value={disconnectedCount} tone="zinc" />
+            </div>
+
+            {error && (
+              <div className="mt-4 rounded-xl border border-red-900 bg-red-950/60 px-4 py-3 text-sm text-red-200">
+                Control plane error: {error}
+              </div>
+            )}
+
+            <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 md:p-6">
+                <div className="mb-4 flex items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-semibold">Agent Registry</h2>
+                    <p className="text-sm text-slate-400">Live control-plane view with heartbeat and capability state</p>
+                  </div>
+                  <button
+                    onClick={refreshAgents}
+                    disabled={loading}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {loading ? "Refreshing..." : "Refresh"}
+                  </button>
+                </div>
+
+                {agents.length === 0 ? (
+                  <div className="rounded-xl border border-slate-800 bg-slate-900 p-8 text-center">
+                    <p className="text-slate-400">{loading ? "Loading agents..." : "No agents registered yet"}</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {agents.map((agent) => (
+                      <AgentCard key={agent.id} agent={agent} onPushRule={pushRule} />
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <aside className="space-y-4">
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+                  <h3 className="text-lg font-semibold">Telemetry Plane</h3>
+                  <p className="mt-2 text-sm text-slate-400">
+                    Embedded full dashboard is loaded from Grafana through nginx (`/grafana`).
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+                  <h3 className="text-lg font-semibold">Control Notes</h3>
+                  <ul className="mt-3 space-y-2 text-sm text-slate-400">
+                    <li>Only connected agents accept policy push.</li>
+                    <li>Stale status indicates heartbeat delay.</li>
+                    <li>Tenant mismatch is blocked server-side.</li>
+                  </ul>
+                </div>
+              </aside>
+            </div>
+
+            <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 md:p-6">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold">Telemetry Dashboard</h2>
+                  <p className="text-sm text-slate-400">Grafana dashboard embedded in-app for operational monitoring.</p>
+                </div>
+                <a
+                  href={grafanaDashboardUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-800"
+                >
+                  Open in New Tab
+                </a>
+              </div>
+              <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
+                <iframe
+                  title="YARAgent Grafana Dashboard"
+                  src={grafanaDashboardUrl}
+                  className="h-[920px] w-full"
+                  loading="lazy"
+                />
+              </div>
+            </section>
+          </main>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SidebarItem({ title, subtitle, active = false }: { title: string; subtitle: string; active?: boolean }) {
+  return (
+    <button
+      className={`w-full rounded-xl border px-3 py-3 text-left transition ${
+        active
+          ? "border-slate-600 bg-slate-800 text-slate-100"
+          : "border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700 hover:bg-slate-800/80"
+      }`}
+    >
+      <p className="text-sm font-medium">{title}</p>
+      <p className="mt-1 text-xs text-slate-400">{subtitle}</p>
+    </button>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "green" | "amber" | "zinc" | "slate";
+}) {
+  const toneClass =
+    tone === "green"
+      ? "border-green-900/70 bg-green-950/40 text-green-200"
+      : tone === "amber"
+      ? "border-amber-900/70 bg-amber-950/40 text-amber-200"
+      : tone === "zinc"
+      ? "border-slate-800 bg-slate-900 text-slate-300"
+      : "border-blue-900/70 bg-blue-950/40 text-blue-200";
+  return (
+    <div className={`rounded-xl border px-4 py-4 ${toneClass}`}>
+      <p className="text-xs uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="mt-3 text-3xl font-bold">{value}</p>
     </div>
   );
 }
@@ -311,15 +446,28 @@ function AgentCard({
   agent,
   onPushRule,
 }: {
-  agent: any;
+  agent: Agent;
   onPushRule: (id: string, rule: string) => Promise<any>;
 }) {
   const [rule, setRule] = useState("");
   const [pushing, setPushing] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const statusClass = (() => {
+    if (agent.status === "stale") return "bg-amber-900 text-amber-300";
+    if (agent.status === "disconnected") return "bg-slate-700 text-slate-300";
+    if (agent.status === "error") return "bg-red-900 text-red-300";
+    return "bg-green-900 text-green-300";
+  })();
+  const isPushAllowed = agent.status === "connected";
+  const formatTs = (value: string | null) => {
+    if (!value) return "n/a";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleString();
+  };
 
   const handlePush = async () => {
-    if (!rule.trim()) return;
+    if (!rule.trim() || !isPushAllowed) return;
     setPushing(true);
     try {
       const res = await onPushRule(agent.id, rule);
@@ -335,7 +483,14 @@ function AgentCard({
     <div className="rounded-lg border border-slate-700 bg-slate-900 p-6">
       <div className="mb-4">
         <h3 className="font-mono text-sm text-slate-300">{agent.id}</h3>
-        <div className="mt-2 inline-block rounded-full bg-green-900 px-3 py-1 text-xs text-green-300">{agent.status}</div>
+        <div className={`mt-2 inline-block rounded-full px-3 py-1 text-xs ${statusClass}`}>{agent.status}</div>
+        <div className="mt-3 space-y-1 text-xs text-slate-400">
+          <p>Tenant: {agent.tenantId || "default"}</p>
+          <p>Connected: {formatTs(agent.connectedAt)}</p>
+          <p>Last Seen: {formatTs(agent.lastSeen)}</p>
+          <p>Last Heartbeat: {formatTs(agent.lastHeartbeat)}</p>
+          <p className="break-all">Capabilities: {Object.keys(agent.capabilities || {}).join(", ") || "none"}</p>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -347,7 +502,7 @@ function AgentCard({
         />
         <button
           onClick={handlePush}
-          disabled={pushing || !rule.trim()}
+          disabled={pushing || !rule.trim() || !isPushAllowed}
           className="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
         >
           {pushing ? "Pushing..." : "Push Rule"}

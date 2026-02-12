@@ -2,9 +2,14 @@
 
 import { createContext, useState, useContext, useCallback } from "react";
 
-interface Agent {
+export interface Agent {
   id: string;
-  status: "connected" | "disconnected" | "error";
+  status: "connected" | "stale" | "disconnected" | "error";
+  tenantId: string | null;
+  connectedAt: string | null;
+  lastSeen: string | null;
+  lastHeartbeat: string | null;
+  capabilities: Record<string, unknown>;
 }
 
 interface SetupSettings {
@@ -154,7 +159,12 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
       setAgents(
         data.map((a: any) => ({
           id: a.id,
-          status: "connected" as const,
+          status: (a.status || "connected") as Agent["status"],
+          tenantId: a.tenant_id || null,
+          connectedAt: a.connected_at || null,
+          lastSeen: a.last_seen || null,
+          lastHeartbeat: a.last_heartbeat || null,
+          capabilities: (a.capabilities || {}) as Record<string, unknown>,
         }))
       );
     } catch (err: any) {

@@ -1,11 +1,12 @@
 import asyncio
 import base64
+import hashlib
 import json
 import logging
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import asyncpg
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
@@ -22,6 +23,8 @@ logging.basicConfig(level=logging.INFO)
 agents: Dict[str, WebSocket] = {}
 # agent_id -> asyncio.Queue of incoming messages from agent
 agent_queues: Dict[str, asyncio.Queue] = {}
+# agent_id -> runtime state
+agent_state: Dict[str, Dict[str, Any]] = {}
 
 security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt_sha256", "bcrypt"], deprecated="auto")
@@ -37,6 +40,7 @@ POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
 POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "yaragent")
+AGENT_STALE_SECONDS = int(os.getenv("AGENT_STALE_SECONDS", "90"))
 
 _db_pool: Optional[asyncpg.Pool] = None
 
@@ -73,6 +77,127 @@ async def _is_initialized() -> bool:
     async with db.acquire() as conn:
         row = await conn.fetchrow(query)
         return bool(row and row["count"] > 0)
+
+
+async def _upsert_agent_control_state(
+    agent_id: str,
+    *,
+    tenant_id: Optional[str] = None,
+    status_value: Optional[str] = None,
+    connected_at: Optional[datetime] = None,
+    last_seen: Optional[datetime] = None,
+    last_heartbeat: Optional[datetime] = None,
+    capabilities: Optional[dict] = None,
+    policy_version: Optional[str] = None,
+    policy_hash: Optional[str] = None,
+    last_policy_result: Optional[str] = None,
+) -> None:
+    db = await _db()
+    async with db.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO agents_control_state (
+                agent_id, tenant_id, status, connected_at, last_seen, last_heartbeat,
+                capabilities_json, policy_version, policy_hash, last_policy_applied_at,
+                last_policy_result, updated_at
+            )
+            VALUES (
+                $1, COALESCE($2, 'default'), COALESCE($3, 'disconnected'), $4, $5, $6,
+                COALESCE($7::jsonb, '{}'::jsonb), $8, $9,
+                CASE WHEN $8 IS NOT NULL OR $9 IS NOT NULL OR $10 IS NOT NULL THEN now() ELSE NULL END,
+                $10, now()
+            )
+            ON CONFLICT (agent_id) DO UPDATE SET
+                tenant_id = COALESCE(EXCLUDED.tenant_id, agents_control_state.tenant_id),
+                status = COALESCE(EXCLUDED.status, agents_control_state.status),
+                connected_at = COALESCE(EXCLUDED.connected_at, agents_control_state.connected_at),
+                last_seen = COALESCE(EXCLUDED.last_seen, agents_control_state.last_seen),
+                last_heartbeat = COALESCE(EXCLUDED.last_heartbeat, agents_control_state.last_heartbeat),
+                capabilities_json = COALESCE(EXCLUDED.capabilities_json, agents_control_state.capabilities_json),
+                policy_version = COALESCE(EXCLUDED.policy_version, agents_control_state.policy_version),
+                policy_hash = COALESCE(EXCLUDED.policy_hash, agents_control_state.policy_hash),
+                last_policy_applied_at = CASE
+                    WHEN EXCLUDED.policy_version IS NOT NULL OR EXCLUDED.policy_hash IS NOT NULL OR EXCLUDED.last_policy_result IS NOT NULL
+                        THEN now()
+                    ELSE agents_control_state.last_policy_applied_at
+                END,
+                last_policy_result = COALESCE(EXCLUDED.last_policy_result, agents_control_state.last_policy_result),
+                updated_at = now()
+            """,
+            agent_id,
+            tenant_id,
+            status_value,
+            connected_at,
+            last_seen,
+            last_heartbeat,
+            json.dumps(capabilities) if capabilities is not None else None,
+            policy_version,
+            policy_hash,
+            last_policy_result,
+        )
+
+
+async def _create_command_job(
+    *,
+    job_id: str,
+    tenant_id: str,
+    agent_id: str,
+    command_type: str,
+    payload: dict,
+) -> None:
+    db = await _db()
+    async with db.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO command_jobs (id, tenant_id, agent_id, command_type, payload_json, status)
+            VALUES ($1, $2, $3, $4, $5::jsonb, 'queued')
+            ON CONFLICT (id) DO NOTHING
+            """,
+            job_id,
+            tenant_id,
+            agent_id,
+            command_type,
+            json.dumps(payload),
+        )
+
+
+async def _update_command_job(
+    *,
+    job_id: str,
+    status_value: str,
+    result: Optional[dict] = None,
+    error_text: Optional[str] = None,
+    mark_started: bool = False,
+    mark_completed: bool = False,
+) -> None:
+    db = await _db()
+    async with db.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE command_jobs
+            SET status = $2,
+                result_json = COALESCE($3::jsonb, result_json),
+                error_text = COALESCE($4, error_text),
+                started_at = CASE WHEN $5 THEN COALESCE(started_at, now()) ELSE started_at END,
+                completed_at = CASE WHEN $6 THEN now() ELSE completed_at END
+            WHERE id = $1
+            """,
+            job_id,
+            status_value,
+            json.dumps(result) if result is not None else None,
+            error_text,
+            mark_started,
+            mark_completed,
+        )
+
+
+def _tenant_for_request(user: dict, payload_tenant: Optional[str]) -> str:
+    tenant = (payload_tenant or "").strip()
+    if tenant:
+        return tenant
+    if user.get("role") == "service":
+        return "default"
+    return "default"
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
@@ -244,17 +369,71 @@ async def update_settings(payload: dict, user: dict = Depends(get_current_user))
 
 @app.get("/agents")
 async def list_agents(_: dict = Depends(get_current_user)):
-    return JSONResponse([{"id": aid} for aid in agents.keys()])
+    db = await _db()
+    rows = []
+    async with db.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT agent_id, tenant_id, status, connected_at, last_seen, last_heartbeat, capabilities_json
+            FROM agents_control_state
+            ORDER BY updated_at DESC
+            """
+        )
+
+    now = datetime.now(timezone.utc)
+    out = []
+    for row in rows:
+        aid = row["agent_id"]
+        connected_at = row["connected_at"]
+        last_seen = row["last_seen"]
+        last_heartbeat = row["last_heartbeat"]
+        capabilities = row.get("capabilities_json") or {}
+        tenant_id = row["tenant_id"]
+        status_value = row["status"] or "disconnected"
+
+        status = status_value
+        if last_heartbeat is not None and (now - last_heartbeat).total_seconds() > AGENT_STALE_SECONDS:
+            if status_value == "connected":
+                status = "stale"
+
+        out.append(
+            {
+                "id": aid,
+                "status": status,
+                "tenant_id": tenant_id,
+                "connected_at": connected_at.isoformat() if connected_at else None,
+                "last_seen": last_seen.isoformat() if last_seen else None,
+                "last_heartbeat": last_heartbeat.isoformat() if last_heartbeat else None,
+                "capabilities": capabilities,
+            }
+        )
+    return JSONResponse(out)
 
 
 @app.websocket("/agent/ws")
 async def agent_ws(ws: WebSocket):
     await ws.accept()
     agent_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
     q: asyncio.Queue = asyncio.Queue()
     agents[agent_id] = ws
     agent_queues[agent_id] = q
+    agent_state[agent_id] = {
+        "connected_at": now,
+        "last_seen": now,
+        "last_heartbeat": None,
+        "capabilities": {},
+        "tenant_id": None,
+    }
     logger.info("agent connected: %s", agent_id)
+    await _upsert_agent_control_state(
+        agent_id,
+        status_value="connected",
+        connected_at=now,
+        last_seen=now,
+        tenant_id="default",
+        capabilities={},
+    )
 
     # send registration message to agent
     await ws.send_text(json.dumps({"type": "agent.registered", "id": agent_id}))
@@ -267,6 +446,30 @@ async def agent_ws(ws: WebSocket):
             except Exception:
                 logger.warning("received non-json from %s: %s", agent_id, data)
                 continue
+            state = agent_state.get(agent_id)
+            if state is not None:
+                state["last_seen"] = datetime.now(timezone.utc)
+                await _upsert_agent_control_state(agent_id, status_value="connected", last_seen=state["last_seen"])
+
+            msg_type = msg.get("type")
+            if msg_type == "agent.heartbeat":
+                if state is not None:
+                    state["last_heartbeat"] = datetime.now(timezone.utc)
+                    caps = msg.get("capabilities")
+                    if isinstance(caps, dict):
+                        state["capabilities"] = caps
+                    tenant_id = msg.get("tenant_id")
+                    if isinstance(tenant_id, str) and tenant_id.strip():
+                        state["tenant_id"] = tenant_id.strip()
+                    await _upsert_agent_control_state(
+                        agent_id,
+                        tenant_id=state.get("tenant_id") or "default",
+                        status_value="connected",
+                        last_seen=state["last_seen"],
+                        last_heartbeat=state["last_heartbeat"],
+                        capabilities=state.get("capabilities") or {},
+                    )
+
             # push message to agent queue for any waiting HTTP callers
             await q.put(msg)
     except WebSocketDisconnect:
@@ -274,10 +477,16 @@ async def agent_ws(ws: WebSocket):
     finally:
         agents.pop(agent_id, None)
         agent_queues.pop(agent_id, None)
+        agent_state.pop(agent_id, None)
+        await _upsert_agent_control_state(
+            agent_id,
+            status_value="disconnected",
+            last_seen=datetime.now(timezone.utc),
+        )
 
 
 @app.post("/push_rule")
-async def push_rule(payload: dict, _: dict = Depends(get_current_user)):
+async def push_rule(payload: dict, user: dict = Depends(get_current_user)):
     """Push a rule to an agent and wait for compile result.
 
     JSON body: { "agent_id": "...", "id": "optional-job-id", "rule_text": "..." }
@@ -291,12 +500,28 @@ async def push_rule(payload: dict, _: dict = Depends(get_current_user)):
     if ws is None:
         raise HTTPException(status_code=404, detail="agent not connected")
 
+    requested_tenant = _tenant_for_request(user, payload.get("tenant_id"))
+    state = agent_state.get(agent_id) or {}
+    agent_tenant = (state.get("tenant_id") or "default").strip()
+    if requested_tenant != agent_tenant:
+        raise HTTPException(status_code=403, detail="agent tenant mismatch")
+
     job_id = payload.get("id") or str(uuid.uuid4())
+    policy_version = (payload.get("policy_version") or job_id).strip()
+    rule_hash = hashlib.sha256(rule_text.encode("utf-8")).hexdigest()
     encoded = base64.b64encode(rule_text.encode("utf-8")).decode("ascii")
     msg = {"type": "rule.push", "id": job_id, "payload": encoded}
+    await _create_command_job(
+        job_id=job_id,
+        tenant_id=requested_tenant,
+        agent_id=agent_id,
+        command_type="rule.push",
+        payload={"policy_version": policy_version, "rule_hash": rule_hash},
+    )
 
     # send to agent
     await ws.send_text(json.dumps(msg))
+    await _update_command_job(job_id=job_id, status_value="sent", mark_started=True)
 
     # wait for compile result from agent queue
     q = agent_queues.get(agent_id)
@@ -307,7 +532,29 @@ async def push_rule(payload: dict, _: dict = Depends(get_current_user)):
         # wait up to 15s for response
         resp = await asyncio.wait_for(_wait_for_job_result(q, job_id), timeout=15.0)
     except asyncio.TimeoutError:
+        await _update_command_job(
+            job_id=job_id,
+            status_value="timeout",
+            error_text="agent did not respond in time",
+            mark_completed=True,
+        )
         raise HTTPException(status_code=504, detail="agent did not respond in time")
+
+    success = bool(resp.get("success"))
+    await _update_command_job(
+        job_id=job_id,
+        status_value="completed" if success else "failed",
+        result=resp,
+        error_text=None if success else str(resp.get("diagnostics") or "compile failed"),
+        mark_completed=True,
+    )
+    await _upsert_agent_control_state(
+        agent_id,
+        tenant_id=agent_tenant,
+        policy_version=policy_version,
+        policy_hash=rule_hash,
+        last_policy_result="success" if success else "failed",
+    )
 
     return JSONResponse(resp)
 

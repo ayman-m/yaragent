@@ -11,10 +11,17 @@ TEMPLATES_DIR = Path("/app/bootstrap/nginx/templates")
 OUTPUT_DIR = Path(os.getenv("INIT_NGINX_OUTPUT_DIR", "/tmp/nginx-generated"))
 RENDER_ENABLED = os.getenv("INIT_NGINX_RENDER", "true").lower() == "true"
 
+OBS_TEMPLATES_DIR = Path("/app/bootstrap/observability/templates")
+OBS_OUTPUT_DIR = Path(os.getenv("INIT_OBSERVABILITY_OUTPUT_DIR", "/tmp/observability-generated"))
+OBS_RENDER_ENABLED = os.getenv("INIT_OBSERVABILITY_RENDER", "true").lower() == "true"
+OBS_LOKI_RETENTION_PERIOD = os.getenv("INIT_OBSERVABILITY_LOKI_RETENTION_PERIOD", "168h")
+OBS_LOKI_MAX_QUERY_LENGTH = os.getenv("INIT_OBSERVABILITY_LOKI_MAX_QUERY_LENGTH", "168h")
+
 SERVER_NAME = os.getenv("INIT_NGINX_SERVER_NAME", "localhost")
 UI_UPSTREAM = os.getenv("INIT_NGINX_UI_UPSTREAM", "ui:3000")
 API_UPSTREAM = os.getenv("INIT_NGINX_API_UPSTREAM", "orchestrator:8002")
 MCP_UPSTREAM = os.getenv("INIT_NGINX_MCP_UPSTREAM", "mcp-server:8001")
+GRAFANA_UPSTREAM = os.getenv("INIT_NGINX_GRAFANA_UPSTREAM", "grafana:3000")
 API_TIMEOUT_SECONDS = os.getenv("INIT_NGINX_API_TIMEOUT_SECONDS", "60")
 
 NGINX_CERT_PRIV = os.getenv("INIT_NGINX_CERT_PRIV", "")
@@ -54,6 +61,7 @@ def _render_template(raw: str) -> str:
         "${UI_UPSTREAM}": UI_UPSTREAM,
         "${API_UPSTREAM}": API_UPSTREAM,
         "${MCP_UPSTREAM}": MCP_UPSTREAM,
+        "${GRAFANA_UPSTREAM}": GRAFANA_UPSTREAM,
         "${API_TIMEOUT_SECONDS}": API_TIMEOUT_SECONDS,
         "${NGINX_CERT_FILE}": "/etc/nginx/ssl/nginx_cert.pem",
         "${NGINX_KEY_FILE}": "/etc/nginx/ssl/nginx_key.pem",
@@ -86,6 +94,23 @@ def render_nginx_assets() -> None:
     _write(nginx_out / "ssl/nginx_cert.pem", pub_text)
 
 
+def render_observability_assets() -> None:
+    if not OBS_TEMPLATES_DIR.exists():
+        return
+    replacements = {
+        "${LOKI_RETENTION_PERIOD}": OBS_LOKI_RETENTION_PERIOD,
+        "${LOKI_MAX_QUERY_LENGTH}": OBS_LOKI_MAX_QUERY_LENGTH,
+    }
+
+    for tmpl in OBS_TEMPLATES_DIR.rglob("*.template"):
+        rel = tmpl.relative_to(OBS_TEMPLATES_DIR)
+        out_rel = rel.with_suffix("")
+        rendered = tmpl.read_text(encoding="utf-8")
+        for key, val in replacements.items():
+            rendered = rendered.replace(key, val)
+        _write(OBS_OUTPUT_DIR / out_rel, rendered)
+
+
 def _wait_for_postgres(max_attempts: int = 60, sleep_seconds: float = 2.0) -> None:
     for _ in range(max_attempts):
         try:
@@ -114,6 +139,41 @@ def init_postgres_schema() -> None:
                 )
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS agents_control_state (
+                    agent_id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL DEFAULT 'default',
+                    status TEXT NOT NULL DEFAULT 'disconnected',
+                    connected_at TIMESTAMPTZ,
+                    last_seen TIMESTAMPTZ,
+                    last_heartbeat TIMESTAMPTZ,
+                    capabilities_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    policy_version TEXT,
+                    policy_hash TEXT,
+                    last_policy_applied_at TIMESTAMPTZ,
+                    last_policy_result TEXT,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS command_jobs (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL DEFAULT 'default',
+                    agent_id TEXT NOT NULL,
+                    command_type TEXT NOT NULL,
+                    payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    status TEXT NOT NULL DEFAULT 'queued',
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    started_at TIMESTAMPTZ,
+                    completed_at TIMESTAMPTZ,
+                    result_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    error_text TEXT
+                )
+                """
+            )
 
 
 def main() -> None:
@@ -121,13 +181,18 @@ def main() -> None:
     init_postgres_schema()
     print("[init] postgres schema initialized")
 
-    if not RENDER_ENABLED:
-        print("[init] nginx render disabled; nothing else to do")
-        return
+    if RENDER_ENABLED:
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        render_nginx_assets()
+        print(f"[init] nginx assets rendered to {OUTPUT_DIR / 'nginx'}")
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    render_nginx_assets()
-    print(f"[init] nginx assets rendered to {OUTPUT_DIR / 'nginx'}")
+    if OBS_RENDER_ENABLED:
+        OBS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        render_observability_assets()
+        print(f"[init] observability assets rendered to {OBS_OUTPUT_DIR}")
+
+    if not RENDER_ENABLED and not OBS_RENDER_ENABLED:
+        print("[init] render disabled; nothing else to do")
 
 
 if __name__ == "__main__":
