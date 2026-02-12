@@ -417,8 +417,17 @@ async def list_agents(_: dict = Depends(get_current_user)):
 @app.websocket("/agent/ws")
 async def agent_ws(ws: WebSocket):
     await ws.accept()
-    agent_id = str(uuid.uuid4())
+    requested_agent_id = (ws.query_params.get("agent_id") or "").strip()
+    agent_id = requested_agent_id or str(uuid.uuid4())
+    if len(agent_id) > 128:
+        agent_id = agent_id[:128]
     now = datetime.now(timezone.utc)
+    previous_ws = agents.get(agent_id)
+    if previous_ws is not None and previous_ws is not ws:
+        try:
+            await previous_ws.close()
+        except Exception:
+            pass
     q: asyncio.Queue = asyncio.Queue()
     agents[agent_id] = ws
     agent_queues[agent_id] = q
@@ -479,14 +488,16 @@ async def agent_ws(ws: WebSocket):
     except WebSocketDisconnect:
         logger.info("agent disconnected: %s", agent_id)
     finally:
-        agents.pop(agent_id, None)
-        agent_queues.pop(agent_id, None)
-        agent_state.pop(agent_id, None)
-        await _upsert_agent_control_state(
-            agent_id,
-            status_value="disconnected",
-            last_seen=datetime.now(timezone.utc),
-        )
+        # Ignore stale disconnects when a newer websocket already replaced this agent_id.
+        if agents.get(agent_id) is ws:
+            agents.pop(agent_id, None)
+            agent_queues.pop(agent_id, None)
+            agent_state.pop(agent_id, None)
+            await _upsert_agent_control_state(
+                agent_id,
+                status_value="disconnected",
+                last_seen=datetime.now(timezone.utc),
+            )
 
 
 @app.post("/push_rule")

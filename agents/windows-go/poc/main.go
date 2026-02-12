@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -196,6 +198,29 @@ func envBool(key string, fallback bool) bool {
 	return v == "1" || v == "true" || v == "yes" || v == "on"
 }
 
+func loadOrCreateAgentID() string {
+	if explicit := strings.TrimSpace(os.Getenv("AGENT_ID")); explicit != "" {
+		return explicit
+	}
+
+	idFile := envOrDefault("AGENT_ID_FILE", "/tmp/yaragent-agent-id")
+	if b, err := os.ReadFile(idFile); err == nil {
+		if existing := strings.TrimSpace(string(b)); existing != "" {
+			return existing
+		}
+	}
+
+	randomBytes := make([]byte, 16)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return fmt.Sprintf("agent-%d", time.Now().UnixNano())
+	}
+	agentID := hex.EncodeToString(randomBytes)
+	if err := os.WriteFile(idFile, []byte(agentID+"\n"), 0o600); err != nil {
+		log.Printf("warning: failed to persist AGENT_ID_FILE=%s: %v", idFile, err)
+	}
+	return agentID
+}
+
 func main() {
 	var wsURL string
 	var token string
@@ -207,6 +232,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("invalid url: %v", err)
 	}
+	agentID := loadOrCreateAgentID()
+	query := u.Query()
+	query.Set("agent_id", agentID)
+	u.RawQuery = query.Encode()
+	log.Printf("using stable agent_id=%s", agentID)
 
 	telemetry := NewTelemetryClient(
 		envBool("TELEMETRY_ENABLED", false),
@@ -240,11 +270,9 @@ func main() {
 		}
 		telemetry.Emit("agent.connection.open", "info", "websocket connected", nil)
 
-		if token != "" {
-			// Send a best-effort hello/enroll message after connect.
-			hello := map[string]string{"type": "hello", "token": token}
-			_ = conn.WriteJSON(hello)
-		}
+		// Send a best-effort hello/enroll message after connect.
+		hello := map[string]string{"type": "hello", "token": token, "agent_id": agentID}
+		_ = conn.WriteJSON(hello)
 
 		var connWriteMu sync.Mutex
 		writeJSON := func(v any) error {
@@ -265,6 +293,7 @@ func main() {
 				case <-ticker.C:
 					hb := map[string]any{
 						"type":      "agent.heartbeat",
+						"agent_id":  agentID,
 						"tenant_id": envOrDefault("TENANT_ID", "default"),
 						"capabilities": map[string]any{
 							"yara_compile": true,
