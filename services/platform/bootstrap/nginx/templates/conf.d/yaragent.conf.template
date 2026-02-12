@@ -18,11 +18,6 @@ upstream yaragent_grafana_upstream {
     keepalive 16;
 }
 
-upstream yaragent_oauth2_proxy_upstream {
-    server ${OAUTH2_PROXY_UPSTREAM};
-    keepalive 8;
-}
-
 server {
     listen 80;
     server_name ${SERVER_NAME};
@@ -37,6 +32,7 @@ server {
     ssl_certificate_key ${NGINX_KEY_FILE};
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_prefer_server_ciphers on;
+    resolver 127.0.0.11 ipv6=off;
 
     client_max_body_size 25m;
 
@@ -72,7 +68,7 @@ server {
 
     location /grafana/ {
         auth_request /oauth2/auth;
-        error_page 401 =302 /oauth2/sign_in?rd=$escaped_request_uri;
+        error_page 401 =302 /oauth2/sign_in?rd=$scheme://$http_host$request_uri;
         auth_request_set $auth_user $upstream_http_x_auth_request_user;
         auth_request_set $auth_email $upstream_http_x_auth_request_email;
         proxy_http_version 1.1;
@@ -84,7 +80,7 @@ server {
 
     location /grafana/api/live/ {
         auth_request /oauth2/auth;
-        error_page 401 =302 /oauth2/sign_in?rd=$escaped_request_uri;
+        error_page 401 =302 /oauth2/sign_in?rd=$scheme://$http_host$request_uri;
         auth_request_set $auth_user $upstream_http_x_auth_request_user;
         auth_request_set $auth_email $upstream_http_x_auth_request_email;
         proxy_http_version 1.1;
@@ -97,6 +93,7 @@ server {
 
     location = /oauth2/auth {
         internal;
+        set $oauth2_proxy_upstream http://${OAUTH2_PROXY_UPSTREAM};
         proxy_http_version 1.1;
         proxy_set_header Connection "";
         proxy_set_header Host $host;
@@ -105,17 +102,18 @@ server {
         proxy_set_header X-Scheme $scheme;
         proxy_set_header Content-Length "";
         proxy_pass_request_body off;
-        proxy_pass http://yaragent_oauth2_proxy_upstream/oauth2/auth;
+        proxy_pass $oauth2_proxy_upstream/oauth2/auth;
     }
 
     location /oauth2/ {
+        set $oauth2_proxy_upstream http://${OAUTH2_PROXY_UPSTREAM};
         proxy_http_version 1.1;
         proxy_set_header Connection "";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Scheme $scheme;
         proxy_set_header X-Auth-Request-Redirect $request_uri;
-        proxy_pass http://yaragent_oauth2_proxy_upstream/oauth2/;
+        proxy_pass $oauth2_proxy_upstream/oauth2/;
     }
 
     location /ws/ {
