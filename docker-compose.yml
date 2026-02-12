@@ -43,6 +43,7 @@ services:
       - INIT_NGINX_MCP_UPSTREAM=mcp-server:8001
       - INIT_NGINX_GRAFANA_UPSTREAM=grafana:3000
       - INIT_NGINX_OAUTH2_PROXY_UPSTREAM=oauth2-proxy:4180
+      - INIT_NGINX_KEYCLOAK_UPSTREAM=keycloak:8080
       - INIT_NGINX_API_TIMEOUT_SECONDS=${API_TIMEOUT_SECONDS:-60}
       - INIT_NGINX_CERT_PRIV=${NGINX_CERT_PRIV}
       - INIT_NGINX_CERT_PUB=${NGINX_CERT_PUB}
@@ -300,7 +301,11 @@ services:
       - --http-address=0.0.0.0:4180
       - --reverse-proxy=true
       - --provider=oidc
-      - --oidc-issuer-url=${OAUTH2_PROXY_OIDC_ISSUER_URL:-http://keycloak:8080/realms/yaragent}
+      - --skip-oidc-discovery=true
+      - --oidc-issuer-url=${OAUTH2_PROXY_OIDC_ISSUER_URL:-https://${NGINX_SERVER_NAME:-localhost}/keycloak/realms/yaragent}
+      - --login-url=${OAUTH2_PROXY_LOGIN_URL:-https://${NGINX_SERVER_NAME:-localhost}/keycloak/realms/yaragent/protocol/openid-connect/auth}
+      - --redeem-url=${OAUTH2_PROXY_REDEEM_URL:-http://keycloak:8080/realms/yaragent/protocol/openid-connect/token}
+      - --oidc-jwks-url=${OAUTH2_PROXY_JWKS_URL:-http://keycloak:8080/realms/yaragent/protocol/openid-connect/certs}
       - --client-id=${OAUTH2_PROXY_CLIENT_ID:-yaragent-oauth2-proxy}
       - --client-secret=${OAUTH2_PROXY_CLIENT_SECRET:-yaragent-client-secret-change-me}
       - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET:-MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
@@ -333,6 +338,8 @@ services:
     environment:
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
       - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      - KC_PROXY_HEADERS=xforwarded
+      - KC_HOSTNAME=https://${NGINX_SERVER_NAME:-localhost}/keycloak
     ports:
       - "127.0.0.1:8081:8080"
     volumes:

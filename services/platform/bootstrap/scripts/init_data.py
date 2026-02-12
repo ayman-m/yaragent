@@ -31,6 +31,7 @@ API_UPSTREAM = os.getenv("INIT_NGINX_API_UPSTREAM", "orchestrator:8002")
 MCP_UPSTREAM = os.getenv("INIT_NGINX_MCP_UPSTREAM", "mcp-server:8001")
 GRAFANA_UPSTREAM = os.getenv("INIT_NGINX_GRAFANA_UPSTREAM", "grafana:3000")
 OAUTH2_PROXY_UPSTREAM = os.getenv("INIT_NGINX_OAUTH2_PROXY_UPSTREAM", "oauth2-proxy:4180")
+KEYCLOAK_UPSTREAM = os.getenv("INIT_NGINX_KEYCLOAK_UPSTREAM", "keycloak:8080")
 API_TIMEOUT_SECONDS = os.getenv("INIT_NGINX_API_TIMEOUT_SECONDS", "60")
 
 NGINX_CERT_PRIV = os.getenv("INIT_NGINX_CERT_PRIV", "")
@@ -72,6 +73,7 @@ def _render_template(raw: str) -> str:
         "${MCP_UPSTREAM}": MCP_UPSTREAM,
         "${GRAFANA_UPSTREAM}": GRAFANA_UPSTREAM,
         "${OAUTH2_PROXY_UPSTREAM}": OAUTH2_PROXY_UPSTREAM,
+        "${KEYCLOAK_UPSTREAM}": KEYCLOAK_UPSTREAM,
         "${API_TIMEOUT_SECONDS}": API_TIMEOUT_SECONDS,
         "${NGINX_CERT_FILE}": "/etc/nginx/ssl/nginx_cert.pem",
         "${NGINX_KEY_FILE}": "/etc/nginx/ssl/nginx_key.pem",
