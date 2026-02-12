@@ -185,9 +185,9 @@ services:
       grafana:
         condition: service_started
       oauth2-proxy:
-        condition: service_healthy
+        condition: service_started
       keycloak:
-        condition: service_healthy
+        condition: service_started
     networks:
       - yaragent-net
     restart: unless-stopped
@@ -319,16 +319,10 @@ services:
       init:
         condition: service_completed_successfully
       keycloak:
-        condition: service_healthy
+        condition: service_started
     networks:
       - yaragent-net
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4180/ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 40s
 
   keycloak:
     build:
@@ -350,12 +344,6 @@ services:
     networks:
       - yaragent-net
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/realms/yaragent/.well-known/openid-configuration"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 60s
 
 networks:
   yaragent-net:
