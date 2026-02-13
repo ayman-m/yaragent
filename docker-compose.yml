@@ -54,7 +54,7 @@ services:
       - INIT_KEYCLOAK_RENDER=${INIT_KEYCLOAK_RENDER:-true}
       - INIT_KEYCLOAK_OUTPUT_DIR=/tmp/keycloak-generated
       - INIT_KEYCLOAK_OAUTH2_CLIENT_SECRET=${INIT_KEYCLOAK_OAUTH2_CLIENT_SECRET:-yaragent-client-secret-change-me}
-      - INIT_KEYCLOAK_REDIRECT_URI=${INIT_KEYCLOAK_REDIRECT_URI:-https://localhost/oauth2/callback}
+      - INIT_KEYCLOAK_REDIRECT_URI=${INIT_KEYCLOAK_REDIRECT_URI:-${PUBLIC_BASE_URL:-https://localhost}/oauth2/callback}
       - INIT_KEYCLOAK_DEMO_USER=${INIT_KEYCLOAK_DEMO_USER:-yaradmin}
       - INIT_KEYCLOAK_DEMO_PASSWORD=${INIT_KEYCLOAK_DEMO_PASSWORD:-yaradmin123!}
     volumes:
@@ -270,7 +270,7 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=false
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SECURITY_COOKIE_SECURE=true
-      - GF_SERVER_ROOT_URL=https://${NGINX_SERVER_NAME:-localhost}/grafana
+      - GF_SERVER_ROOT_URL=${PUBLIC_BASE_URL:-https://localhost}/grafana
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
       - GF_AUTH_BASIC_ENABLED=false
       - GF_AUTH_DISABLE_LOGIN_FORM=true
@@ -302,14 +302,14 @@ services:
       - --reverse-proxy=true
       - --provider=oidc
       - --skip-oidc-discovery=true
-      - --oidc-issuer-url=${OAUTH2_PROXY_OIDC_ISSUER_URL:-https://${NGINX_SERVER_NAME:-localhost}/keycloak/realms/yaragent}
-      - --login-url=${OAUTH2_PROXY_LOGIN_URL:-https://${NGINX_SERVER_NAME:-localhost}/keycloak/realms/yaragent/protocol/openid-connect/auth}
+      - --oidc-issuer-url=${OAUTH2_PROXY_OIDC_ISSUER_URL:-${PUBLIC_BASE_URL:-https://localhost}/keycloak/realms/yaragent}
+      - --login-url=${OAUTH2_PROXY_LOGIN_URL:-${PUBLIC_BASE_URL:-https://localhost}/keycloak/realms/yaragent/protocol/openid-connect/auth}
       - --redeem-url=${OAUTH2_PROXY_REDEEM_URL:-http://keycloak:8080/realms/yaragent/protocol/openid-connect/token}
       - --oidc-jwks-url=${OAUTH2_PROXY_JWKS_URL:-http://keycloak:8080/realms/yaragent/protocol/openid-connect/certs}
       - --client-id=${OAUTH2_PROXY_CLIENT_ID:-yaragent-oauth2-proxy}
       - --client-secret=${OAUTH2_PROXY_CLIENT_SECRET:-yaragent-client-secret-change-me}
       - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET:-MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
-      - --redirect-url=${OAUTH2_PROXY_REDIRECT_URL:-https://localhost/oauth2/callback}
+      - --redirect-url=${OAUTH2_PROXY_REDIRECT_URL:-${PUBLIC_BASE_URL:-https://localhost}/oauth2/callback}
       - --email-domain=*
       - --set-xauthrequest=true
       - --pass-user-headers=true
@@ -339,7 +339,7 @@ services:
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
       - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
       - KC_PROXY_HEADERS=xforwarded
-      - KC_HOSTNAME=https://${NGINX_SERVER_NAME:-localhost}/keycloak
+      - KC_HOSTNAME=${PUBLIC_BASE_URL:-https://localhost}/keycloak
     ports:
       - "127.0.0.1:8081:8080"
     volumes:
