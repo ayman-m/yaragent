@@ -1,6 +1,7 @@
 "use client";
 
 import { Agent, useAgents } from "@/components/agent-context";
+import { WavyBackground } from "@/components/ui/wavy-background";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type NavSection = "overview" | "agents" | "telemetry" | "alerts";
@@ -372,13 +373,13 @@ function MetricCard({
 
 function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children?: React.ReactNode }) {
   return (
-    <div className="flex h-full items-center justify-center bg-slate-950 px-4 text-slate-100">
-      <div className="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900 p-8">
+    <WavyBackground containerClassName="h-full" className="flex h-full items-center justify-center px-4 py-8 text-slate-100">
+      <div className="w-full max-w-md rounded-xl border border-slate-700/70 bg-slate-900/80 p-8 shadow-[0_20px_80px_rgba(15,23,42,0.55)] backdrop-blur">
         <h1 className="text-2xl font-bold">{title}</h1>
-        {subtitle ? <p className="mt-2 text-sm text-slate-400">{subtitle}</p> : null}
+        {subtitle ? <p className="mt-2 text-sm text-slate-300">{subtitle}</p> : null}
         {children ? <div className="mt-6">{children}</div> : null}
       </div>
-    </div>
+    </WavyBackground>
   );
 }
 
