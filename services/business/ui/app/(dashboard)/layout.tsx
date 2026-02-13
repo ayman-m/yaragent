@@ -33,14 +33,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => {
       alive = false;
     };
-  }, [checkSetupStatus, token, router, pathname]);
+  }, [checkSetupStatus, token, router]);
 
   useEffect(() => {
     if (!token) return;
+    const shouldPollAgents = pathname !== "/telemetry" && pathname !== "/alerts";
+    if (!shouldPollAgents) return;
     refreshAgents();
     const interval = setInterval(refreshAgents, 5000);
     return () => clearInterval(interval);
-  }, [token, refreshAgents]);
+  }, [token, refreshAgents, pathname]);
 
   const handleLogout = () => {
     logout();
