@@ -11,20 +11,8 @@ export default function TelemetryPage() {
         <p className="mt-1 text-sm text-slate-400">Embedded Grafana dashboard for operational visibility</p>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-4 md:p-8">
-        <div className="mb-3 flex items-center justify-end">
-          <a
-            href={grafanaDashboardUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-800"
-          >
-            Open in New Tab
-          </a>
-        </div>
-        <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
-          <iframe title="YARAgent Grafana Dashboard" src={grafanaDashboardUrl} className="h-[920px] w-full" loading="lazy" />
-        </div>
+      <main className="flex min-h-0 flex-1">
+        <iframe title="YARAgent Grafana Dashboard" src={grafanaDashboardUrl} className="h-full w-full border-0" loading="lazy" />
       </main>
     </>
   );

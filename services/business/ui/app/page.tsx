@@ -126,7 +126,16 @@ export default function HomePage() {
 
 function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children?: React.ReactNode }) {
   return (
-    <WavyBackground containerClassName="h-full" className="flex h-full items-center justify-center px-4 py-8 text-slate-100">
+    <WavyBackground
+      containerClassName="h-full min-h-screen w-full"
+      className="flex h-full items-center justify-center px-4 py-8 text-slate-100"
+      colors={["#2563eb", "#0ea5e9", "#14b8a6", "#1d4ed8"]}
+      backgroundFill="#020617"
+      blur={14}
+      speed="slow"
+      waveOpacity={0.25}
+      waveWidth={42}
+    >
       <div className="w-full max-w-md rounded-xl border border-slate-700/70 bg-slate-900/80 p-8 shadow-[0_20px_80px_rgba(15,23,42,0.55)] backdrop-blur">
         <h1 className="text-2xl font-bold">{title}</h1>
         {subtitle ? <p className="mt-2 text-sm text-slate-300">{subtitle}</p> : null}

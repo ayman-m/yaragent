@@ -31,7 +31,7 @@ export function DashboardSidebar({ onLogout }: { onLogout: () => void }) {
 
   return (
     <>
-      <aside className="hidden h-full w-[300px] flex-shrink-0 border-r border-slate-800 bg-slate-900/95 px-4 py-4 md:flex md:flex-col">
+      <aside className="hidden h-full w-[264px] flex-shrink-0 border-r border-slate-800 bg-slate-900/95 px-3 py-4 md:flex md:flex-col">
         <SidebarBody activeHref={activeHref} onLogout={onLogout} closeMobile={() => setMobileOpen(false)} />
       </aside>
 
@@ -84,7 +84,7 @@ function SidebarBody({
 }) {
   return (
     <>
-      <div className="mb-6 rounded-xl border border-slate-800 bg-slate-900 px-4 py-5">
+      <div className="mb-5 rounded-xl border border-slate-800/90 bg-slate-900 px-4 py-5 shadow-[0_0_0_1px_rgba(15,23,42,0.35)]">
         <p className="text-xs uppercase tracking-[0.18em] text-slate-400">YARAgent</p>
         <h2 className="mt-2 text-lg font-semibold text-slate-100">Control Center</h2>
         <p className="mt-1 text-xs text-slate-400">Control plane + telemetry operations</p>
@@ -96,7 +96,9 @@ function SidebarBody({
         ))}
       </nav>
 
-      <div className="mt-auto rounded-xl border border-slate-800 bg-slate-900 p-4">
+      <div className="my-4 h-px bg-slate-800/90" />
+
+      <div className="mt-auto rounded-xl border border-slate-800/90 bg-slate-900 p-4 shadow-[0_0_0_1px_rgba(15,23,42,0.35)]">
         <p className="text-xs uppercase tracking-widest text-slate-500">Session</p>
         <p className="mt-2 text-sm text-slate-300">Authenticated operator</p>
         <button
@@ -126,7 +128,7 @@ function SidebarLink({
   return (
     <Link
       href={link.href}
-      className="group relative block rounded-xl border border-slate-800 px-3 py-3"
+      className="group relative block rounded-xl border border-slate-800/90 px-3 py-2.5 transition-colors"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={onNavigate}
@@ -136,7 +138,7 @@ function SidebarLink({
           layoutId="sidebar-hover"
           className={clsx(
             "absolute inset-0 rounded-xl",
-            active ? "bg-slate-800" : "bg-slate-800/60"
+            active ? "bg-slate-800/95" : "bg-slate-800/60"
           )}
         />
       )}
@@ -146,7 +148,14 @@ function SidebarLink({
           {link.icon}
         </div>
         <div>
-          <p className={clsx("text-sm font-medium", active ? "text-slate-100" : "text-slate-300")}>{link.label}</p>
+          <p
+            className={clsx(
+              "text-sm font-medium transition-transform duration-150 group-hover:translate-x-0.5",
+              active ? "text-slate-100" : "text-slate-300"
+            )}
+          >
+            {link.label}
+          </p>
           <p className="mt-1 text-xs text-slate-400">{link.subtitle}</p>
         </div>
       </div>
