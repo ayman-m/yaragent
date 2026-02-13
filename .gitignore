@@ -9,3 +9,4 @@ plans/*
 start_tunnels.sh
 .yaragent-tunnels/*
 *pycache*
+smokes/*
