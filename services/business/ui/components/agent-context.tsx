@@ -150,9 +150,6 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         headers: withAuthHeaders(),
       });
       if (!res.ok) {
-        if (res.status === 401) {
-          logout();
-        }
         throw new Error(`HTTP ${res.status}`);
       }
       const data = await res.json();
@@ -173,7 +170,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [token, withAuthHeaders, logout]);
+  }, [token, withAuthHeaders]);
 
   const pushRule = useCallback(
     async (agentId: string, ruleText: string) => {
