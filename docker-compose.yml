@@ -334,7 +334,12 @@ services:
       context: .
       dockerfile: services/infra/security/keycloak/Dockerfile
     container_name: yaragent-keycloak
-    command: ["start-dev", "--http-port=8080", "--hostname-strict=false", "--import-realm"]
+    command:
+      - /bin/sh
+      - -c
+      - |
+        /opt/keycloak/bin/kc.sh import --dir=/opt/keycloak/data/import --override=true
+        /opt/keycloak/bin/kc.sh start-dev --http-port=8080 --hostname-strict=false
     environment:
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
       - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
