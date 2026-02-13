@@ -1,6 +1,7 @@
 "use client";
 
 import { useAgents } from "@/components/agent-context";
+import { ToolsStackCard } from "@/components/ui/tools-stack-card";
 import { WavyBackground } from "@/components/ui/wavy-background";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -102,7 +103,7 @@ export default function HomePage() {
   }
 
   return (
-    <Shell title="Sign In" subtitle="Authenticate to manage agents">
+    <Shell title="Sign In" subtitle="Authenticate to manage agents" showToolsCard>
       <AuthForm
         onSubmit={handleLogin}
         username={username}
@@ -124,7 +125,17 @@ export default function HomePage() {
   );
 }
 
-function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children?: React.ReactNode }) {
+function Shell({
+  title,
+  subtitle,
+  children,
+  showToolsCard = false,
+}: {
+  title: string;
+  subtitle?: string;
+  children?: React.ReactNode;
+  showToolsCard?: boolean;
+}) {
   return (
     <WavyBackground
       containerClassName="h-full min-h-screen w-full"
@@ -136,10 +147,13 @@ function Shell({ title, subtitle, children }: { title: string; subtitle?: string
       waveOpacity={0.25}
       waveWidth={42}
     >
-      <div className="w-full max-w-md rounded-xl border border-slate-700/70 bg-slate-900/80 p-8 shadow-[0_20px_80px_rgba(15,23,42,0.55)] backdrop-blur">
-        <h1 className="text-2xl font-bold">{title}</h1>
-        {subtitle ? <p className="mt-2 text-sm text-slate-300">{subtitle}</p> : null}
-        {children ? <div className="mt-6">{children}</div> : null}
+      <div className="w-full max-w-xl space-y-4">
+        <div className="rounded-xl border border-slate-700/70 bg-slate-900/80 p-8 shadow-[0_20px_80px_rgba(15,23,42,0.55)] backdrop-blur">
+          <h1 className="text-2xl font-bold">{title}</h1>
+          {subtitle ? <p className="mt-2 text-sm text-slate-300">{subtitle}</p> : null}
+          {children ? <div className="mt-6">{children}</div> : null}
+        </div>
+        {showToolsCard ? <ToolsStackCard /> : null}
       </div>
     </WavyBackground>
   );
