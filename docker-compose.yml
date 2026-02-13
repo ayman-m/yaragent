@@ -304,8 +304,8 @@ services:
       - --skip-oidc-discovery=true
       - --oidc-issuer-url=${OAUTH2_PROXY_OIDC_ISSUER_URL:-${PUBLIC_BASE_URL:-https://localhost}/keycloak/realms/yaragent}
       - --login-url=${OAUTH2_PROXY_LOGIN_URL:-${PUBLIC_BASE_URL:-https://localhost}/keycloak/realms/yaragent/protocol/openid-connect/auth}
-      - --redeem-url=${OAUTH2_PROXY_REDEEM_URL:-http://keycloak:8080/realms/yaragent/protocol/openid-connect/token}
-      - --oidc-jwks-url=${OAUTH2_PROXY_JWKS_URL:-http://keycloak:8080/realms/yaragent/protocol/openid-connect/certs}
+      - --redeem-url=${OAUTH2_PROXY_REDEEM_URL:-http://keycloak:8080/keycloak/realms/yaragent/protocol/openid-connect/token}
+      - --oidc-jwks-url=${OAUTH2_PROXY_JWKS_URL:-http://keycloak:8080/keycloak/realms/yaragent/protocol/openid-connect/certs}
       - --client-id=${OAUTH2_PROXY_CLIENT_ID:-yaragent-oauth2-proxy}
       - --client-secret=${OAUTH2_PROXY_CLIENT_SECRET:-yaragent-client-secret-change-me}
       - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET:-MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
@@ -339,7 +339,8 @@ services:
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
       - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
       - KC_PROXY_HEADERS=xforwarded
-      - KC_HOSTNAME=${PUBLIC_BASE_URL:-https://localhost}/keycloak
+      - KC_HOSTNAME=${PUBLIC_BASE_URL:-https://localhost}
+      - KC_HTTP_RELATIVE_PATH=/keycloak
     ports:
       - "127.0.0.1:8081:8080"
     volumes:
