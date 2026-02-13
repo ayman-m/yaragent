@@ -112,7 +112,7 @@ export function WavyBackground({
         className="absolute inset-0 z-0"
         ref={canvasRef}
         id="canvas"
-        style={{ ...(isSafari ? { filter: `blur(${blur}px)` : {}) }}
+        style={{ ...(isSafari ? { filter: `blur(${blur}px)` } : {}) }}
       />
       <div className={cn("relative z-10", className)} {...props}>
         {children}
