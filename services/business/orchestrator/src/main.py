@@ -344,6 +344,16 @@ async def login(payload: dict) -> JSONResponse:
     )
 
 
+@app.get("/auth/validate")
+async def validate_auth(user: dict = Depends(get_current_user)) -> JSONResponse:
+    username = str(user.get("sub", "user"))
+    headers = {
+        "X-Auth-Request-User": username,
+        "X-Auth-Request-Email": username,
+    }
+    return JSONResponse({"ok": True, "user": username}, headers=headers)
+
+
 @app.get("/settings")
 async def get_settings(user: dict = Depends(get_current_user)) -> JSONResponse:
     username = str(user["sub"])

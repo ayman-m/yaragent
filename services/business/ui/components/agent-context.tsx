@@ -50,8 +50,10 @@ function storeToken(token: string | null): void {
   if (typeof window === "undefined") return;
   if (token) {
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    document.cookie = `${TOKEN_STORAGE_KEY}=${encodeURIComponent(token)}; Path=/; Secure; SameSite=Lax`;
   } else {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
+    document.cookie = `${TOKEN_STORAGE_KEY}=; Path=/; Max-Age=0; Secure; SameSite=Lax`;
   }
 }
 
