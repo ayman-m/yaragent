@@ -16,7 +16,6 @@ import {
   IconLogout2,
   IconNotification,
   IconSettings,
-  IconSatellite,
   IconShieldHalf,
   IconStar,
 } from "@tabler/icons-react";
