@@ -1,6 +1,7 @@
 "use client";
 
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
+import { LinesGradientShader } from "@/components/ui/lines-gradient-shader";
 import { useAgents } from "@/components/agent-context";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -57,7 +58,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="h-screen bg-white text-slate-900">
       <div className="flex h-screen">
         <DashboardSidebar onLogout={handleLogout} />
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">{children}</div>
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+          <LinesGradientShader
+            className="pointer-events-none absolute inset-0"
+            bandCount={12}
+            bandSpacing={42}
+            bandThickness={96}
+            waveAmplitude={0.2}
+            speed={1}
+            bandOpacity={0.1}
+            highlightOpacity={0.08}
+          />
+          <div className="relative z-10 flex min-h-0 flex-1 flex-col">{children}</div>
+        </div>
       </div>
     </div>
   );
