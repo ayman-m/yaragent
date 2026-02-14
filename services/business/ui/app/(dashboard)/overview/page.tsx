@@ -29,9 +29,9 @@ export default function OverviewPage() {
           </div>
         )}
 
-        <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+        <section className="mt-6 rounded-2xl border border-neutral-800 bg-neutral-950 p-5">
           <h2 className="text-lg font-semibold">Operational Notes</h2>
-          <ul className="mt-3 space-y-2 text-sm text-slate-400">
+          <ul className="mt-3 space-y-2 text-sm text-neutral-400">
             <li>Connected agents accept policy push and compile validation.</li>
             <li>Stale agents exceeded heartbeat threshold and require network/runtime checks.</li>
             <li>Disconnected agents are retained for historical visibility.</li>
@@ -53,16 +53,16 @@ function MetricCard({
 }) {
   const toneClass =
     tone === "green"
-      ? "border-green-900/70 bg-green-950/40 text-green-200"
+      ? "border-emerald-900/60 bg-emerald-950/20 text-emerald-300"
       : tone === "amber"
-      ? "border-amber-900/70 bg-amber-950/40 text-amber-200"
+      ? "border-amber-900/60 bg-amber-950/20 text-amber-300"
       : tone === "zinc"
-      ? "border-slate-800 bg-slate-900 text-slate-300"
-      : "border-blue-900/70 bg-blue-950/40 text-blue-200";
+      ? "border-neutral-800 bg-neutral-950 text-neutral-300"
+      : "border-neutral-800 bg-neutral-950 text-neutral-200";
 
   return (
     <div className={`rounded-xl border px-4 py-4 ${toneClass}`}>
-      <p className="text-xs uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="text-xs uppercase tracking-widest text-neutral-500">{label}</p>
       <p className="mt-3 text-3xl font-bold">{value}</p>
     </div>
   );

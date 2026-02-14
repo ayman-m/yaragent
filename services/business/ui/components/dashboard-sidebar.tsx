@@ -4,11 +4,13 @@ import { cn } from "@/lib/utils";
 import {
   IconActivityHeartbeat,
   IconBellRinging,
+  IconBrandGithub,
+  IconBook2,
   IconLayoutDashboard,
+  IconLayoutSidebarRightCollapse,
   IconLogout2,
-  IconMenu2,
   IconSatellite,
-  IconX,
+  IconSettings,
 } from "@tabler/icons-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
@@ -29,12 +31,17 @@ const primaryLinks: SidebarLinkItem[] = [
   { label: "Alerts", href: "/alerts", icon: IconBellRinging },
 ];
 
+const secondaryLinks: SidebarLinkItem[] = [
+  { label: "Docs", href: "#", icon: IconBook2 },
+  { label: "Settings", href: "#", icon: IconSettings },
+  { label: "GitHub", href: "#", icon: IconBrandGithub },
+];
+
 const footerLinks: SidebarLinkItem[] = [{ label: "Sign Out", href: "#", icon: IconLogout2 }];
 
 export function DashboardSidebar({ onLogout }: { onLogout: () => void }) {
   const pathname = usePathname();
-  const [openMobile, setOpenMobile] = useState(false);
-  const [openDesktop, setOpenDesktop] = useState(false);
+  const [openMobile, setOpenMobile] = useState(true);
 
   const activeHref = useMemo(() => {
     const found = primaryLinks.find((x) => pathname.startsWith(x.href));
@@ -46,25 +53,23 @@ export function DashboardSidebar({ onLogout }: { onLogout: () => void }) {
 
   return (
     <>
-      <motion.aside
-        className="hidden h-full shrink-0 border-r border-slate-800/80 bg-[linear-gradient(180deg,#030d25_0%,#061635_52%,#050f27_100%)] px-3 py-4 md:flex md:flex-col"
-        animate={{ width: openDesktop ? 256 : 84 }}
-        onMouseEnter={() => setOpenDesktop(true)}
-        onMouseLeave={() => setOpenDesktop(false)}
-      >
+      <aside className="hidden h-full w-[14rem] shrink-0 border-r border-neutral-800 bg-neutral-950 px-3 py-6 md:flex md:flex-col">
         <SidebarBody
-          open={openDesktop}
+          open
           activeHref={activeHref}
           links={links}
+          secondaryLinks={secondaryLinks}
           sessionLinks={sessionLinks}
           onNavigate={() => undefined}
         />
-      </motion.aside>
+      </aside>
 
-      <div className="flex h-12 w-full items-center justify-between border-b border-slate-800 bg-slate-950 px-4 md:hidden">
-        <p className="text-sm font-semibold text-slate-100">YARAgent</p>
-        <IconMenu2 className="text-slate-200" onClick={() => setOpenMobile(true)} />
-      </div>
+      <button
+        className="fixed bottom-4 right-4 z-50 flex h-8 w-8 items-center justify-center rounded-full border border-neutral-700 bg-black/70 text-neutral-300 backdrop-blur-sm md:hidden"
+        onClick={() => setOpenMobile((prev) => !prev)}
+      >
+        <IconLayoutSidebarRightCollapse className="h-4 w-4" />
+      </button>
 
       <AnimatePresence>
         {openMobile && (
@@ -73,15 +78,13 @@ export function DashboardSidebar({ onLogout }: { onLogout: () => void }) {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: "-100%", opacity: 0 }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="fixed inset-0 z-[120] flex h-full w-full flex-col bg-[linear-gradient(180deg,#030d25_0%,#061635_52%,#050f27_100%)] p-4 md:hidden"
+            className="fixed inset-0 z-[120] flex h-full w-[14rem] flex-col border-r border-neutral-800 bg-neutral-950 px-3 py-6 md:hidden"
           >
-            <div className="absolute right-6 top-6 z-50 text-slate-200">
-              <IconX onClick={() => setOpenMobile(false)} />
-            </div>
             <SidebarBody
               open
               activeHref={activeHref}
               links={links}
+              secondaryLinks={secondaryLinks}
               sessionLinks={sessionLinks}
               onNavigate={() => setOpenMobile(false)}
             />
@@ -96,27 +99,29 @@ function SidebarBody({
   open,
   activeHref,
   links,
+  secondaryLinks,
   sessionLinks,
   onNavigate,
 }: {
   open: boolean;
   activeHref: string;
   links: SidebarLinkItem[];
+  secondaryLinks: SidebarLinkItem[];
   sessionLinks: SidebarLinkItem[];
   onNavigate: () => void;
 }) {
   return (
     <div className="flex h-full flex-col justify-between">
-      <div className="space-y-6">
+      <div className="space-y-6 overflow-y-auto">
         <Link href="/overview" onClick={onNavigate} className="block">
           <div className={cn("flex items-center gap-3 rounded-xl px-2 py-2 transition-all", open ? "justify-start" : "justify-center")}>
-            <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-400 to-cyan-300" />
+            <div className="h-7 w-7 rounded-lg border border-neutral-700 bg-neutral-900" />
             <motion.div
               animate={{ opacity: open ? 1 : 0, width: open ? "auto" : 0 }}
               className="overflow-hidden whitespace-nowrap"
             >
-              <p className="text-sm font-semibold tracking-wide text-slate-100">YARAgent</p>
-              <p className="text-xs text-slate-400">Control Plane</p>
+              <p className="text-sm font-semibold tracking-wide text-neutral-100">YARAgent</p>
+              <p className="text-xs text-neutral-500">Control Plane</p>
             </motion.div>
           </div>
         </Link>
@@ -126,9 +131,18 @@ function SidebarBody({
             <SidebarLink key={link.href} link={link} open={open} active={activeHref === link.href} onNavigate={onNavigate} />
           ))}
         </nav>
+
+        <div className="pt-6">
+          <p className="px-2 text-xs font-medium tracking-wide text-neutral-500">Tools</p>
+          <nav className="mt-2 space-y-1">
+            {secondaryLinks.map((link) => (
+              <SidebarLink key={link.label} link={link} open={open} active={false} onNavigate={onNavigate} />
+            ))}
+          </nav>
+        </div>
       </div>
 
-      <div className="space-y-2 border-t border-slate-800/70 pt-4">
+      <div className="space-y-2 border-t border-neutral-800/70 pt-4">
         {sessionLinks.map((link) => (
           <SidebarLink key={link.label} link={link} open={open} active={false} onNavigate={onNavigate} />
         ))}
@@ -162,11 +176,13 @@ function SidebarLink({
       className={cn(
         "group relative flex items-center rounded-xl px-2 py-2 transition-all duration-200",
         open ? "justify-start gap-3" : "justify-center",
-        active ? "bg-slate-700/70 text-white" : "text-slate-300 hover:bg-slate-800/70 hover:text-slate-100"
+        active
+          ? "border border-neutral-700 bg-neutral-900 text-white shadow-lg shadow-black/30"
+          : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100"
       )}
     >
-      {active && <motion.div layoutId="esparka-sidebar-active" className="absolute inset-0 rounded-xl border border-slate-500/40" />}
-      <Icon className={cn("relative z-10 h-5 w-5", active ? "text-cyan-300" : "text-slate-300")} />
+      {active && <motion.div layoutId="manuarora-sidebar-active" className="absolute inset-0 rounded-xl" />}
+      <Icon className={cn("relative z-10 h-5 w-5", active ? "text-white" : "text-neutral-400")} />
       <motion.span
         animate={{ opacity: open ? 1 : 0, width: open ? "auto" : 0 }}
         className="relative z-10 overflow-hidden whitespace-nowrap text-sm font-medium"

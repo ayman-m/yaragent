@@ -50,14 +50,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   if (!ready) {
-    return <div className="flex h-screen items-center justify-center bg-slate-950 text-slate-300">Loading dashboard...</div>;
+    return <div className="flex h-screen items-center justify-center bg-black text-neutral-300">Loading dashboard...</div>;
   }
 
   return (
-    <div className="h-screen bg-slate-950 text-slate-100">
+    <div className="h-screen bg-black text-neutral-100">
       <div className="flex h-screen">
         <DashboardSidebar onLogout={handleLogout} />
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-neutral-950">{children}</div>
       </div>
     </div>
   );
