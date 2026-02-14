@@ -105,7 +105,7 @@ export default function HomePage() {
 
   return (
     <Shell title="Sign In" subtitle="Authenticate to manage agents" showToolsCard>
-      <div className="grid gap-6 md:grid-cols-[1fr_auto_1fr] md:items-center">
+      <div className="grid gap-6 md:grid-cols-[1fr_auto_1fr] md:items-start">
         <div>
           <AuthForm
             onSubmit={handleLogin}
@@ -135,18 +135,22 @@ export default function HomePage() {
           <div className="absolute inset-0 bg-slate-600/30" />
         </div>
 
-        <div className="md:pl-2">
+        <div className="md:pl-2 md:pt-1">
           <p className="text-lg font-semibold text-slate-200">
             Powered by{" "}
             <FlippingText
-              words={["Next.js", "Grafana", "Loki", "Keycloak", "MCP"]}
+              words={["Next.js", "Grafana", "Gemini", "GraphQL", "Loki", "Keycloak", "MCP"]}
               className="text-cyan-300"
             />
           </p>
           <p className="mt-3 text-sm leading-6 text-slate-300">
             Unified control plane and telemetry for endpoint operations.
             <br />
-            Secure workflows, real-time visibility, and scalable observability.
+            Secure workflows and real-time policy distribution.
+            <br />
+            Deep observability across control and telemetry planes.
+            <br />
+            Built for resilient operations at enterprise scale.
           </p>
         </div>
       </div>
@@ -205,8 +209,11 @@ function FlippingText({
           </motion.span>
         ))}
       <motion.span
-        className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-cyan-300"
-        animate={{ opacity: [1, 0.25, 1] }}
+        className="ml-1 inline-block h-1.5 w-1.5 rounded-full"
+        animate={{
+          opacity: [1, 0.25, 1],
+          backgroundColor: isDeleting ? "#ef4444" : "#60a5fa",
+        }}
         transition={{ duration: 0.7, repeat: Infinity }}
       />
     </span>
