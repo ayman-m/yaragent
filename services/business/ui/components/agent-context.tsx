@@ -76,6 +76,16 @@ function storeToken(token: string | null): void {
   }
 }
 
+function ensureRecordArray(input: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(input)) {
+    return input.filter((x) => x && typeof x === "object") as Array<Record<string, unknown>>;
+  }
+  if (input && typeof input === "object") {
+    return [input as Record<string, unknown>];
+  }
+  return [];
+}
+
 export function AgentProvider({ children }: { children: React.ReactNode }) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [token, setToken] = useState<string | null>(getStoredToken());
@@ -243,8 +253,8 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         lastSeen: data.last_seen || null,
         lastHeartbeat: data.last_heartbeat || null,
         assetProfile: (data.asset_profile || {}) as Record<string, unknown>,
-        sbom: (data.sbom || []) as Array<Record<string, unknown>>,
-        cves: (data.cves || []) as Array<Record<string, unknown>>,
+        sbom: ensureRecordArray(data.sbom),
+        cves: ensureRecordArray(data.cves),
         findingsCount: Number(data.findings_count || 0),
       };
     },

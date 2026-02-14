@@ -46,6 +46,8 @@ export default function AgentDetailPage() {
   }, [agentId, getAgentProfile, refreshAgents]);
 
   const title = String(profile?.assetProfile?.asset_name || agentId || "Agent");
+  const safeSbom = Array.isArray(profile?.sbom) ? profile.sbom : [];
+  const safeCves = Array.isArray(profile?.cves) ? profile.cves : [];
 
   return (
     <>
@@ -101,8 +103,8 @@ export default function AgentDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {profile.sbom.length > 0 ? (
-                      profile.sbom.map((pkg, idx) => (
+                    {safeSbom.length > 0 ? (
+                      safeSbom.map((pkg, idx) => (
                         <tr key={`${String(pkg.name || "pkg")}-${idx}`} className="border-b border-slate-100">
                           <td className="px-2 py-2">{String(pkg.name || "unknown")}</td>
                           <td className="px-2 py-2">{String(pkg.version || "unknown")}</td>
@@ -133,8 +135,8 @@ export default function AgentDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {profile.cves.length > 0 ? (
-                      profile.cves.map((cve, idx) => (
+                    {safeCves.length > 0 ? (
+                      safeCves.map((cve, idx) => (
                         <tr key={`${String(cve.id || "cve")}-${idx}`} className="border-b border-slate-100">
                           <td className="px-2 py-2">{String(cve.id || "unknown")}</td>
                           <td className="px-2 py-2">{String(cve.severity || "unknown")}</td>
