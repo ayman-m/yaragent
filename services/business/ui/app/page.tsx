@@ -76,12 +76,18 @@ export default function HomePage() {
 
   if (mode === "loading") {
     return (
-      <Shell title="Loading">
-        <div className="flex flex-col items-center gap-3 py-4">
-          <LoaderThree />
-          <p className="text-sm text-slate-300">Checking setup status...</p>
-        </div>
-      </Shell>
+      <WavyBackground
+        containerClassName="h-full min-h-screen w-full"
+        className="flex h-full items-center justify-center px-4 py-8 text-slate-100"
+        colors={["#2563eb", "#0ea5e9", "#14b8a6", "#1d4ed8"]}
+        backgroundFill="#020617"
+        blur={14}
+        speed="slow"
+        waveOpacity={0.25}
+        waveWidth={42}
+      >
+        <LoaderThree />
+      </WavyBackground>
     );
   }
 
