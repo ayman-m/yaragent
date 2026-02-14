@@ -41,8 +41,13 @@ POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "yaragent")
 AGENT_STALE_SECONDS = int(os.getenv("AGENT_STALE_SECONDS", "90"))
+AGENT_EPHEMERAL_LEASE_SECONDS = int(os.getenv("AGENT_EPHEMERAL_LEASE_SECONDS", "120"))
+AGENT_EPHEMERAL_GRACE_SECONDS = int(os.getenv("AGENT_EPHEMERAL_GRACE_SECONDS", "300"))
+AGENT_CLEANUP_INTERVAL_SECONDS = int(os.getenv("AGENT_CLEANUP_INTERVAL_SECONDS", "60"))
+AGENT_AUTO_DELETE_EPHEMERAL = (os.getenv("AGENT_AUTO_DELETE_EPHEMERAL", "true").strip().lower() in {"1", "true", "yes", "on"})
 
 _db_pool: Optional[asyncpg.Pool] = None
+_cleanup_task: Optional[asyncio.Task] = None
 
 
 def create_access_token(subject: str) -> str:
@@ -91,6 +96,14 @@ async def _upsert_agent_control_state(
     policy_version: Optional[str] = None,
     policy_hash: Optional[str] = None,
     last_policy_result: Optional[str] = None,
+    is_ephemeral: Optional[bool] = None,
+    instance_id: Optional[str] = None,
+    runtime_kind: Optional[str] = None,
+    lease_expires_at: Optional[datetime] = None,
+    asset_profile: Optional[dict] = None,
+    sbom_snapshot: Optional[list] = None,
+    cve_snapshot: Optional[list] = None,
+    findings_count: Optional[int] = None,
 ) -> None:
     db = await _db()
     async with db.acquire() as conn:
@@ -99,7 +112,8 @@ async def _upsert_agent_control_state(
             INSERT INTO agents_control_state (
                 agent_id, tenant_id, status, connected_at, last_seen, last_heartbeat,
                 capabilities_json, policy_version, policy_hash, last_policy_applied_at,
-                last_policy_result, updated_at
+                last_policy_result, is_ephemeral, instance_id, runtime_kind, lease_expires_at,
+                asset_profile_json, sbom_json, cve_json, findings_count, updated_at
             )
             VALUES (
                 $1::text, COALESCE($2::text, 'default'), COALESCE($3::text, 'disconnected'),
@@ -109,7 +123,9 @@ async def _upsert_agent_control_state(
                     WHEN $8::text IS NOT NULL OR $9::text IS NOT NULL OR $10::text IS NOT NULL THEN now()
                     ELSE NULL
                 END,
-                $10::text, now()
+                $10::text, COALESCE($11::boolean, false), $12::text, $13::text, $14::timestamptz,
+                COALESCE($15::jsonb, '{}'::jsonb), COALESCE($16::jsonb, '[]'::jsonb), COALESCE($17::jsonb, '[]'::jsonb), COALESCE($18::int, 0),
+                now()
             )
             ON CONFLICT (agent_id) DO UPDATE SET
                 tenant_id = COALESCE(EXCLUDED.tenant_id, agents_control_state.tenant_id),
@@ -126,6 +142,14 @@ async def _upsert_agent_control_state(
                     ELSE agents_control_state.last_policy_applied_at
                 END,
                 last_policy_result = COALESCE(EXCLUDED.last_policy_result, agents_control_state.last_policy_result),
+                is_ephemeral = COALESCE(EXCLUDED.is_ephemeral, agents_control_state.is_ephemeral),
+                instance_id = COALESCE(EXCLUDED.instance_id, agents_control_state.instance_id),
+                runtime_kind = COALESCE(EXCLUDED.runtime_kind, agents_control_state.runtime_kind),
+                lease_expires_at = COALESCE(EXCLUDED.lease_expires_at, agents_control_state.lease_expires_at),
+                asset_profile_json = COALESCE(EXCLUDED.asset_profile_json, agents_control_state.asset_profile_json),
+                sbom_json = COALESCE(EXCLUDED.sbom_json, agents_control_state.sbom_json),
+                cve_json = COALESCE(EXCLUDED.cve_json, agents_control_state.cve_json),
+                findings_count = COALESCE(EXCLUDED.findings_count, agents_control_state.findings_count),
                 updated_at = now()
             """,
             agent_id,
@@ -138,7 +162,74 @@ async def _upsert_agent_control_state(
             policy_version,
             policy_hash,
             last_policy_result,
+            is_ephemeral,
+            instance_id,
+            runtime_kind,
+            lease_expires_at,
+            json.dumps(asset_profile) if asset_profile is not None else None,
+            json.dumps(sbom_snapshot) if sbom_snapshot is not None else None,
+            json.dumps(cve_snapshot) if cve_snapshot is not None else None,
+            findings_count,
         )
+
+
+def _is_truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on", "y"}
+    return False
+
+
+def _lease_expiry(now: datetime) -> datetime:
+    return now + timedelta(seconds=max(30, AGENT_EPHEMERAL_LEASE_SECONDS))
+
+
+async def _cleanup_expired_ephemeral_agents() -> int:
+    db = await _db()
+    async with db.acquire() as conn:
+        candidate_rows = await conn.fetch(
+            """
+            SELECT agent_id
+            FROM agents_control_state
+            WHERE is_ephemeral = true
+              AND lease_expires_at IS NOT NULL
+              AND lease_expires_at < (now() - make_interval(secs => $1::int))
+            ORDER BY lease_expires_at ASC
+            LIMIT 500
+            """,
+            max(0, AGENT_EPHEMERAL_GRACE_SECONDS),
+        )
+        if not candidate_rows:
+            return 0
+        candidate_ids = [str(row["agent_id"]) for row in candidate_rows]
+        to_delete = [aid for aid in candidate_ids if aid not in agents]
+        if not to_delete:
+            return 0
+        result = await conn.fetch(
+            """
+            DELETE FROM agents_control_state
+            WHERE agent_id = ANY($1::text[])
+            RETURNING agent_id
+            """,
+            to_delete,
+        )
+        return len(result)
+
+
+async def _cleanup_loop() -> None:
+    interval = max(10, AGENT_CLEANUP_INTERVAL_SECONDS)
+    while True:
+        try:
+            if AGENT_AUTO_DELETE_EPHEMERAL:
+                deleted = await _cleanup_expired_ephemeral_agents()
+                if deleted > 0:
+                    logger.info("ephemeral cleanup removed %d expired agent records", deleted)
+        except Exception:
+            logger.exception("ephemeral cleanup failed")
+        await asyncio.sleep(interval)
 
 
 async def _create_command_job(
@@ -230,7 +321,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 @app.on_event("startup")
 async def startup() -> None:
-    global _db_pool
+    global _db_pool, _cleanup_task
     if JWT_SECRET_KEY == "change-me":
         logger.warning("JWT_SECRET_KEY is using default value. Set it via environment secret.")
     if DATABASE_URL:
@@ -245,11 +336,19 @@ async def startup() -> None:
             min_size=1,
             max_size=10,
         )
+    _cleanup_task = asyncio.create_task(_cleanup_loop())
 
 
 @app.on_event("shutdown")
 async def shutdown() -> None:
-    global _db_pool
+    global _db_pool, _cleanup_task
+    if _cleanup_task is not None:
+        _cleanup_task.cancel()
+        try:
+            await _cleanup_task
+        except asyncio.CancelledError:
+            pass
+        _cleanup_task = None
     if _db_pool is not None:
         await _db_pool.close()
         _db_pool = None
@@ -388,7 +487,9 @@ async def list_agents(_: dict = Depends(get_current_user)):
     async with db.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT agent_id, tenant_id, status, connected_at, last_seen, last_heartbeat, capabilities_json
+            SELECT agent_id, tenant_id, status, connected_at, last_seen, last_heartbeat,
+                   capabilities_json, is_ephemeral, instance_id, runtime_kind, lease_expires_at,
+                   asset_profile_json, findings_count
             FROM agents_control_state
             ORDER BY updated_at DESC
             """
@@ -404,6 +505,12 @@ async def list_agents(_: dict = Depends(get_current_user)):
         capabilities = row.get("capabilities_json") or {}
         tenant_id = row["tenant_id"]
         status_value = row["status"] or "disconnected"
+        is_ephemeral = bool(row.get("is_ephemeral"))
+        instance_id = row.get("instance_id")
+        runtime_kind = row.get("runtime_kind")
+        lease_expires_at = row.get("lease_expires_at")
+        asset_profile = row.get("asset_profile_json") or {}
+        findings_count = int(row.get("findings_count") or 0)
 
         status = status_value
         if last_heartbeat is not None and (now - last_heartbeat).total_seconds() > AGENT_STALE_SECONDS:
@@ -419,15 +526,54 @@ async def list_agents(_: dict = Depends(get_current_user)):
                 "last_seen": last_seen.isoformat() if last_seen else None,
                 "last_heartbeat": last_heartbeat.isoformat() if last_heartbeat else None,
                 "capabilities": capabilities,
+                "is_ephemeral": is_ephemeral,
+                "instance_id": instance_id,
+                "runtime_kind": runtime_kind,
+                "lease_expires_at": lease_expires_at.isoformat() if lease_expires_at else None,
+                "asset_profile": asset_profile,
+                "findings_count": findings_count,
             }
         )
     return JSONResponse(out)
+
+
+@app.get("/agents/{agent_id}/profile")
+async def get_agent_profile(agent_id: str, _: dict = Depends(get_current_user)) -> JSONResponse:
+    db = await _db()
+    async with db.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT agent_id, tenant_id, connected_at, last_seen, last_heartbeat,
+                   asset_profile_json, sbom_json, cve_json, findings_count
+            FROM agents_control_state
+            WHERE agent_id = $1
+            """,
+            agent_id,
+        )
+    if row is None:
+        raise HTTPException(status_code=404, detail="agent not found")
+    return JSONResponse(
+        {
+            "agent_id": row["agent_id"],
+            "tenant_id": row["tenant_id"],
+            "connected_at": row["connected_at"].isoformat() if row["connected_at"] else None,
+            "last_seen": row["last_seen"].isoformat() if row["last_seen"] else None,
+            "last_heartbeat": row["last_heartbeat"].isoformat() if row["last_heartbeat"] else None,
+            "asset_profile": row.get("asset_profile_json") or {},
+            "sbom": row.get("sbom_json") or [],
+            "cves": row.get("cve_json") or [],
+            "findings_count": int(row.get("findings_count") or 0),
+        }
+    )
 
 
 @app.websocket("/agent/ws")
 async def agent_ws(ws: WebSocket):
     await ws.accept()
     requested_agent_id = (ws.query_params.get("agent_id") or "").strip()
+    requested_ephemeral = _is_truthy(ws.query_params.get("ephemeral"))
+    requested_instance_id = (ws.query_params.get("instance_id") or "").strip() or None
+    requested_runtime = (ws.query_params.get("runtime") or "").strip() or None
     agent_id = requested_agent_id or str(uuid.uuid4())
     if len(agent_id) > 128:
         agent_id = agent_id[:128]
@@ -447,6 +593,14 @@ async def agent_ws(ws: WebSocket):
         "last_heartbeat": None,
         "capabilities": {},
         "tenant_id": None,
+        "is_ephemeral": requested_ephemeral,
+        "instance_id": requested_instance_id,
+        "runtime_kind": requested_runtime,
+        "lease_expires_at": _lease_expiry(now) if requested_ephemeral else None,
+        "asset_profile": {},
+        "sbom": [],
+        "cves": [],
+        "findings_count": 0,
     }
     logger.info("agent connected: %s", agent_id)
     await _upsert_agent_control_state(
@@ -456,6 +610,10 @@ async def agent_ws(ws: WebSocket):
         last_seen=now,
         tenant_id="default",
         capabilities={},
+        is_ephemeral=requested_ephemeral,
+        instance_id=requested_instance_id,
+        runtime_kind=requested_runtime,
+        lease_expires_at=_lease_expiry(now) if requested_ephemeral else None,
     )
 
     # send registration message to agent
@@ -481,6 +639,36 @@ async def agent_ws(ws: WebSocket):
                     caps = msg.get("capabilities")
                     if isinstance(caps, dict):
                         state["capabilities"] = caps
+                        cap_runtime = str(caps.get("runtime") or "").strip().lower()
+                        cap_instance_id = str(caps.get("instance_id") or "").strip() or None
+                        cap_containerized = _is_truthy(caps.get("containerized"))
+                        if cap_runtime in {"container", "docker", "k8s", "kubernetes", "containerd"} or cap_containerized:
+                            state["is_ephemeral"] = True
+                        if cap_instance_id:
+                            state["instance_id"] = cap_instance_id
+                        if cap_runtime:
+                            state["runtime_kind"] = cap_runtime
+                    profile_payload = msg.get("asset_profile")
+                    if isinstance(profile_payload, dict):
+                        state["asset_profile"] = profile_payload
+                    sbom_payload = msg.get("sbom")
+                    if isinstance(sbom_payload, list):
+                        state["sbom"] = sbom_payload[:500]
+                    cve_payload = msg.get("cves")
+                    if isinstance(cve_payload, list):
+                        state["cves"] = cve_payload[:1000]
+                    findings_payload = msg.get("findings_count")
+                    if isinstance(findings_payload, int):
+                        state["findings_count"] = max(0, findings_payload)
+                    elif isinstance(state.get("cves"), list):
+                        state["findings_count"] = len(state["cves"])
+                    if _is_truthy(msg.get("ephemeral")):
+                        state["is_ephemeral"] = True
+                    msg_instance_id = str(msg.get("instance_id") or "").strip() or None
+                    if msg_instance_id:
+                        state["instance_id"] = msg_instance_id
+                    if state.get("is_ephemeral"):
+                        state["lease_expires_at"] = _lease_expiry(state["last_heartbeat"])
                     tenant_id = msg.get("tenant_id")
                     if isinstance(tenant_id, str) and tenant_id.strip():
                         state["tenant_id"] = tenant_id.strip()
@@ -491,6 +679,14 @@ async def agent_ws(ws: WebSocket):
                         last_seen=state["last_seen"],
                         last_heartbeat=state["last_heartbeat"],
                         capabilities=state.get("capabilities") or {},
+                        is_ephemeral=bool(state.get("is_ephemeral")),
+                        instance_id=state.get("instance_id"),
+                        runtime_kind=state.get("runtime_kind"),
+                        lease_expires_at=state.get("lease_expires_at"),
+                        asset_profile=state.get("asset_profile") or {},
+                        sbom_snapshot=state.get("sbom") or [],
+                        cve_snapshot=state.get("cves") or [],
+                        findings_count=int(state.get("findings_count") or 0),
                     )
 
             # push message to agent queue for any waiting HTTP callers

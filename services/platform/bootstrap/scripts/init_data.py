@@ -179,12 +179,35 @@ def init_postgres_schema() -> None:
                     last_seen TIMESTAMPTZ,
                     last_heartbeat TIMESTAMPTZ,
                     capabilities_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    is_ephemeral BOOLEAN NOT NULL DEFAULT false,
+                    instance_id TEXT,
+                    runtime_kind TEXT,
+                    lease_expires_at TIMESTAMPTZ,
+                    asset_profile_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    sbom_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    cve_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    findings_count INTEGER NOT NULL DEFAULT 0,
                     policy_version TEXT,
                     policy_hash TEXT,
                     last_policy_applied_at TIMESTAMPTZ,
                     last_policy_result TEXT,
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
                 )
+                """
+            )
+            cur.execute("ALTER TABLE agents_control_state ADD COLUMN IF NOT EXISTS is_ephemeral BOOLEAN NOT NULL DEFAULT false")
+            cur.execute("ALTER TABLE agents_control_state ADD COLUMN IF NOT EXISTS instance_id TEXT")
+            cur.execute("ALTER TABLE agents_control_state ADD COLUMN IF NOT EXISTS runtime_kind TEXT")
+            cur.execute("ALTER TABLE agents_control_state ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ")
+            cur.execute("ALTER TABLE agents_control_state ADD COLUMN IF NOT EXISTS asset_profile_json JSONB NOT NULL DEFAULT '{}'::jsonb")
+            cur.execute("ALTER TABLE agents_control_state ADD COLUMN IF NOT EXISTS sbom_json JSONB NOT NULL DEFAULT '[]'::jsonb")
+            cur.execute("ALTER TABLE agents_control_state ADD COLUMN IF NOT EXISTS cve_json JSONB NOT NULL DEFAULT '[]'::jsonb")
+            cur.execute("ALTER TABLE agents_control_state ADD COLUMN IF NOT EXISTS findings_count INTEGER NOT NULL DEFAULT 0")
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_agents_control_state_ephemeral_lease
+                ON agents_control_state (lease_expires_at)
+                WHERE is_ephemeral = true
                 """
             )
             cur.execute(

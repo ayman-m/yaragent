@@ -11,9 +11,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net"
 	"net/url"
 	"os"
+	osuser "os/user"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -198,6 +202,25 @@ func envBool(key string, fallback bool) bool {
 	return v == "1" || v == "true" || v == "yes" || v == "on"
 }
 
+func runningInContainer() bool {
+	if envBool("AGENT_EPHEMERAL", false) {
+		return true
+	}
+	if strings.TrimSpace(os.Getenv("KUBERNETES_SERVICE_HOST")) != "" {
+		return true
+	}
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
+	}
+	if b, err := os.ReadFile("/proc/1/cgroup"); err == nil {
+		txt := strings.ToLower(string(b))
+		if strings.Contains(txt, "docker") || strings.Contains(txt, "containerd") || strings.Contains(txt, "kubepods") || strings.Contains(txt, "podman") {
+			return true
+		}
+	}
+	return false
+}
+
 func loadOrCreateAgentID() string {
 	if explicit := strings.TrimSpace(os.Getenv("AGENT_ID")); explicit != "" {
 		return explicit
@@ -221,6 +244,155 @@ func loadOrCreateAgentID() string {
 	return agentID
 }
 
+func readTotalMemoryBytes() int64 {
+	b, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0
+	}
+	lines := strings.Split(string(b), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "MemTotal:") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				v, err := strconv.ParseInt(fields[1], 10, 64)
+				if err == nil {
+					return v * 1024
+				}
+			}
+		}
+	}
+	return 0
+}
+
+func collectNetworkInterfaces() []map[string]any {
+	out := make([]map[string]any, 0)
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return out
+	}
+	for _, iface := range ifaces {
+		entry := map[string]any{
+			"name":  iface.Name,
+			"mtu":   iface.MTU,
+			"flags": iface.Flags.String(),
+		}
+		if hw := strings.TrimSpace(iface.HardwareAddr.String()); hw != "" {
+			entry["mac"] = hw
+		}
+		addrs, err := iface.Addrs()
+		if err == nil && len(addrs) > 0 {
+			addrVals := make([]string, 0, len(addrs))
+			for _, a := range addrs {
+				addrVals = append(addrVals, a.String())
+			}
+			entry["addresses"] = addrVals
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+func collectAssetProfile(agentID, instanceID string, containerized bool) map[string]any {
+	host, _ := os.Hostname()
+	currentUser := "unknown"
+	if u, err := osuser.Current(); err == nil {
+		if strings.TrimSpace(u.Username) != "" {
+			currentUser = u.Username
+		}
+	}
+	groupsRaw := strings.TrimSpace(os.Getenv("ASSET_GROUPS"))
+	groups := []string{}
+	if groupsRaw != "" {
+		for _, g := range strings.Split(groupsRaw, ",") {
+			if gg := strings.TrimSpace(g); gg != "" {
+				groups = append(groups, gg)
+			}
+		}
+	}
+	return map[string]any{
+		"asset_id":     envOrDefault("ASSET_ID", agentID),
+		"asset_name":   envOrDefault("ASSET_NAME", host),
+		"provider":     envOrDefault("CLOUD_PROVIDER", "unknown"),
+		"cloud_region": envOrDefault("CLOUD_REGION", "unknown"),
+		"account_id":   envOrDefault("CLOUD_ACCOUNT_ID", "unknown"),
+		"asset_category": envOrDefault("ASSET_CATEGORY", "host"),
+		"instance_id":  instanceID,
+		"runtime_kind": map[bool]string{true: "container", false: "host"}[containerized],
+		"os": map[string]any{
+			"name":       runtime.GOOS,
+			"arch":       runtime.GOARCH,
+			"go_version": runtime.Version(),
+		},
+		"hardware": map[string]any{
+			"cpu_cores":          runtime.NumCPU(),
+			"memory_total_bytes": readTotalMemoryBytes(),
+		},
+		"network": map[string]any{
+			"interfaces": collectNetworkInterfaces(),
+		},
+		"user": map[string]any{
+			"current_user": currentUser,
+		},
+		"asset_groups": groups,
+		"last_scanned": time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
+func collectSBOMSnapshot() []map[string]any {
+	base := []map[string]any{
+		{
+			"name":    "yaragent-agent-poc",
+			"version": envOrDefault("AGENT_VERSION", "dev"),
+			"type":    "application",
+		},
+	}
+	raw := strings.TrimSpace(os.Getenv("SBOM_PACKAGES"))
+	if raw == "" {
+		return base
+	}
+	parts := strings.Split(raw, ",")
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		name := p
+		version := "unknown"
+		if strings.Contains(p, ":") {
+			kv := strings.SplitN(p, ":", 2)
+			name = strings.TrimSpace(kv[0])
+			version = strings.TrimSpace(kv[1])
+		}
+		base = append(base, map[string]any{
+			"name":    name,
+			"version": version,
+			"type":    "package",
+		})
+	}
+	return base
+}
+
+func collectCVESnapshot() []map[string]any {
+	raw := strings.TrimSpace(os.Getenv("MOCK_CVES"))
+	if raw == "" {
+		return []map[string]any{}
+	}
+	items := []map[string]any{}
+	for _, part := range strings.Split(raw, ",") {
+		id := strings.TrimSpace(part)
+		if id == "" {
+			continue
+		}
+		items = append(items, map[string]any{
+			"id":       id,
+			"severity": "unknown",
+			"status":   "open",
+		})
+	}
+	return items
+}
+
 func main() {
 	var wsURL string
 	var token string
@@ -233,10 +405,24 @@ func main() {
 		log.Fatalf("invalid url: %v", err)
 	}
 	agentID := loadOrCreateAgentID()
+	containerized := runningInContainer()
+	instanceID := strings.TrimSpace(os.Getenv("HOSTNAME"))
+	if instanceID == "" {
+		instanceID = agentID
+	}
 	query := u.Query()
 	query.Set("agent_id", agentID)
+	if containerized {
+		query.Set("ephemeral", "1")
+		query.Set("runtime", "container")
+	}
+	query.Set("instance_id", instanceID)
 	u.RawQuery = query.Encode()
 	log.Printf("using stable agent_id=%s", agentID)
+	assetProfile := collectAssetProfile(agentID, instanceID, containerized)
+	sbomSnapshot := collectSBOMSnapshot()
+	cveSnapshot := collectCVESnapshot()
+	findingsCount := len(cveSnapshot)
 
 	telemetry := NewTelemetryClient(
 		envBool("TELEMETRY_ENABLED", false),
@@ -292,13 +478,22 @@ func main() {
 					return
 				case <-ticker.C:
 					hb := map[string]any{
-						"type":      "agent.heartbeat",
-						"agent_id":  agentID,
-						"tenant_id": envOrDefault("TENANT_ID", "default"),
+						"type":        "agent.heartbeat",
+						"agent_id":    agentID,
+						"tenant_id":   envOrDefault("TENANT_ID", "default"),
+						"ephemeral":   containerized,
+						"instance_id": instanceID,
+						"asset_profile": assetProfile,
+						"sbom":          sbomSnapshot,
+						"cves":          cveSnapshot,
+						"findings_count": findingsCount,
 						"capabilities": map[string]any{
-							"yara_compile": true,
-							"transport":    "websocket",
-							"telemetry":    envBool("TELEMETRY_ENABLED", false),
+							"yara_compile":  true,
+							"transport":     "websocket",
+							"telemetry":     envBool("TELEMETRY_ENABLED", false),
+							"containerized": containerized,
+							"runtime":       map[bool]string{true: "container", false: "host"}[containerized],
+							"instance_id":   instanceID,
 						},
 					}
 					if err := writeJSON(hb); err != nil {
