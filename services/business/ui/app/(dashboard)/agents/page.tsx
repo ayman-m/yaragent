@@ -16,7 +16,7 @@ export default function AgentsPage() {
           <button
             onClick={refreshAgents}
             disabled={loading}
-            className="rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm font-medium text-neutral-100 hover:bg-neutral-800 disabled:opacity-50"
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
             {loading ? "Refreshing..." : "Refresh"}
           </button>
@@ -31,8 +31,8 @@ export default function AgentsPage() {
         )}
 
         {agents.length === 0 ? (
-          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-8 text-center">
-            <p className="text-neutral-400">{loading ? "Loading agents..." : "No agents registered yet"}</p>
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+            <p className="text-slate-500">{loading ? "Loading agents..." : "No agents registered yet"}</p>
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">

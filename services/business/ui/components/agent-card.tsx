@@ -15,10 +15,10 @@ export function AgentCard({
   const [result, setResult] = useState<any>(null);
 
   const statusClass = (() => {
-    if (agent.status === "stale") return "bg-amber-900 text-amber-300";
-    if (agent.status === "disconnected") return "bg-slate-700 text-slate-300";
-    if (agent.status === "error") return "bg-red-900 text-red-300";
-    return "bg-green-900 text-green-300";
+    if (agent.status === "stale") return "bg-amber-100 text-amber-700";
+    if (agent.status === "disconnected") return "bg-slate-100 text-slate-700";
+    if (agent.status === "error") return "bg-red-100 text-red-700";
+    return "bg-green-100 text-green-700";
   })();
 
   const isPushAllowed = agent.status === "connected";
@@ -44,11 +44,11 @@ export function AgentCard({
   };
 
   return (
-    <div className="rounded-lg border border-slate-700 bg-slate-900 p-6">
+    <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
       <div className="mb-4">
-        <h3 className="font-mono text-sm text-slate-300">{agent.id}</h3>
+        <h3 className="font-mono text-sm text-slate-700">{agent.id}</h3>
         <div className={`mt-2 inline-block rounded-full px-3 py-1 text-xs ${statusClass}`}>{agent.status}</div>
-        <div className="mt-3 space-y-1 text-xs text-slate-400">
+        <div className="mt-3 space-y-1 text-xs text-slate-500">
           <p>Tenant: {agent.tenantId || "default"}</p>
           <p>Connected: {formatTs(agent.connectedAt)}</p>
           <p>Last Seen: {formatTs(agent.lastSeen)}</p>
@@ -62,19 +62,19 @@ export function AgentCard({
           value={rule}
           onChange={(e) => setRule(e.target.value)}
           placeholder="rule test { condition: true }"
-          className="h-32 w-full rounded bg-slate-800 p-2 font-mono text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="h-32 w-full rounded border border-slate-200 bg-slate-50 p-2 font-mono text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400"
         />
         <button
           onClick={handlePush}
           disabled={pushing || !rule.trim() || !isPushAllowed}
-          className="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
         >
           {pushing ? "Pushing..." : "Push Rule"}
         </button>
       </div>
 
       {result && (
-        <div className={`mt-4 rounded p-3 text-sm ${result.error ? "bg-red-900 text-red-100" : "bg-green-900 text-green-100"}`}>
+        <div className={`mt-4 rounded p-3 text-sm ${result.error ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
           {result.error || JSON.stringify(result)}
         </div>
       )}
