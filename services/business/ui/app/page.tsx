@@ -79,7 +79,7 @@ export default function HomePage() {
 
   if (mode === "setup") {
     return (
-      <Shell title="Initial Setup" subtitle="Create the first administrator account and base settings">
+      <Shell title="Initial Setup">
         <AuthForm
           onSubmit={handleSetup}
           username={username}
@@ -104,7 +104,7 @@ export default function HomePage() {
   }
 
   return (
-    <Shell title="Sign In" subtitle="Authenticate to manage agents" showToolsCard>
+    <Shell title="Sign In" showToolsCard>
       <div className="grid gap-6 md:grid-cols-[1fr_auto_1fr] md:items-start">
         <div>
           <AuthForm
@@ -222,12 +222,10 @@ function FlippingText({
 
 function Shell({
   title,
-  subtitle,
   children,
   showToolsCard = false,
 }: {
   title: string;
-  subtitle?: string;
   children?: React.ReactNode;
   showToolsCard?: boolean;
 }) {
@@ -245,7 +243,6 @@ function Shell({
       <div className="w-full max-w-2xl space-y-4">
         <div className="rounded-xl border border-slate-700/70 bg-slate-900/80 p-8 shadow-[0_20px_80px_rgba(15,23,42,0.55)] backdrop-blur">
           <h1 className="text-2xl font-bold">{title}</h1>
-          {subtitle ? <p className="mt-2 text-sm text-slate-300">{subtitle}</p> : null}
           {children ? <div className="mt-6">{children}</div> : null}
         </div>
         {showToolsCard ? <div className="mt-6"><ToolsStackCard /></div> : null}
