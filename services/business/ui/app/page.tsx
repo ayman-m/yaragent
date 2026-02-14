@@ -153,7 +153,7 @@ function Shell({
           {subtitle ? <p className="mt-2 text-sm text-slate-300">{subtitle}</p> : null}
           {children ? <div className="mt-6">{children}</div> : null}
         </div>
-        {showToolsCard ? <ToolsStackCard /> : null}
+        {showToolsCard ? <div className="mt-6"><ToolsStackCard /></div> : null}
       </div>
     </WavyBackground>
   );
