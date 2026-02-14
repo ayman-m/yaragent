@@ -65,6 +65,7 @@ export default function AgentsPage() {
       <DashboardPageHeader
         title="Agents"
         subtitle="Connectivity, heartbeat, and policy push controls"
+        flipSubtitle
         action={
           <button
             onClick={refreshAgents}

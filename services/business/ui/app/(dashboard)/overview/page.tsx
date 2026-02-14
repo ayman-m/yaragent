@@ -13,7 +13,7 @@ export default function OverviewPage() {
 
   return (
     <>
-      <DashboardPageHeader title="Overview" subtitle="Fleet status and control-plane posture" />
+      <DashboardPageHeader title="Overview" subtitle="Fleet status and control-plane posture" flipSubtitle />
 
       <main className="flex-1 overflow-y-auto p-4 md:p-8">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

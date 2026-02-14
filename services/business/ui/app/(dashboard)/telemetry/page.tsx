@@ -8,7 +8,7 @@ export default function TelemetryPage() {
 
   return (
     <>
-      <DashboardPageHeader title="Telemetry" subtitle="Embedded Grafana dashboard for operational visibility" />
+      <DashboardPageHeader title="Telemetry" subtitle="Embedded Grafana dashboard for operational visibility" flipSubtitle />
 
       <main className="flex min-h-0 flex-1">
         <iframe title="YARAgent Grafana Dashboard" src={grafanaDashboardUrl} className="h-full w-full border-0" loading="lazy" />
