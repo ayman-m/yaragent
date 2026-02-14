@@ -4,21 +4,13 @@ import { cn } from "@/lib/utils";
 import {
   IconActivityHeartbeat,
   IconBellRinging,
-  IconBuildingStore,
-  IconChartBar,
-  IconClipboardData,
-  IconDatabase,
-  IconEyeSearch,
-  IconGridDots,
-  IconHelpCircle,
+  IconBrandGithub,
+  IconBook2,
   IconLayoutDashboard,
   IconLayoutSidebarRightCollapse,
   IconLogout2,
-  IconNotification,
-  IconSettings,
   IconSatellite,
-  IconShieldHalf,
-  IconStar,
+  IconSettings,
 } from "@tabler/icons-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
@@ -33,27 +25,16 @@ type SidebarLinkItem = {
 };
 
 const primaryLinks: SidebarLinkItem[] = [
-  { label: "Favorites", href: "/overview", icon: IconStar },
-  { label: "Dashboards & Reports", href: "/overview", icon: IconLayoutDashboard },
-  { label: "Cases & Issues", href: "/alerts", icon: IconBellRinging },
-  { label: "Investigation & Response", href: "/agents", icon: IconEyeSearch },
-  { label: "Threat Management", href: "/agents", icon: IconShieldHalf },
-  { label: "Posture Management", href: "/overview", icon: IconClipboardData },
-  { label: "Inventory", href: "/agents", icon: IconDatabase },
-  { label: "Modules", href: "/telemetry", icon: IconGridDots },
+  { label: "Overview", href: "/overview", icon: IconLayoutDashboard },
+  { label: "Agents", href: "/agents", icon: IconSatellite },
+  { label: "Telemetry", href: "/telemetry", icon: IconActivityHeartbeat },
+  { label: "Alerts", href: "/alerts", icon: IconBellRinging },
 ];
 
 const secondaryLinks: SidebarLinkItem[] = [
-  { label: "Settings", href: "/overview", icon: IconSettings },
-  { label: "Tenant Navigator", href: "/overview", icon: IconBuildingStore },
-  { label: "Notifications", href: "/overview", icon: IconNotification },
-  { label: "Help", href: "/overview", icon: IconHelpCircle },
-];
-
-const toolsLinks: SidebarLinkItem[] = [
-  { label: "Telemetry", href: "/telemetry", icon: IconActivityHeartbeat },
-  { label: "Analytics", href: "/overview", icon: IconChartBar },
+  { label: "Docs", href: "#", icon: IconBook2 },
   { label: "Settings", href: "#", icon: IconSettings },
+  { label: "GitHub", href: "#", icon: IconBrandGithub },
 ];
 
 const footerLinks: SidebarLinkItem[] = [{ label: "Sign Out", href: "#", icon: IconLogout2 }];
@@ -78,7 +59,6 @@ export function DashboardSidebar({ onLogout }: { onLogout: () => void }) {
           activeHref={activeHref}
           links={links}
           secondaryLinks={secondaryLinks}
-          toolsLinks={toolsLinks}
           sessionLinks={sessionLinks}
           onNavigate={() => undefined}
         />
@@ -105,7 +85,6 @@ export function DashboardSidebar({ onLogout }: { onLogout: () => void }) {
               activeHref={activeHref}
               links={links}
               secondaryLinks={secondaryLinks}
-              toolsLinks={toolsLinks}
               sessionLinks={sessionLinks}
               onNavigate={() => setOpenMobile(false)}
             />
@@ -121,7 +100,6 @@ function SidebarBody({
   activeHref,
   links,
   secondaryLinks,
-  toolsLinks,
   sessionLinks,
   onNavigate,
 }: {
@@ -129,7 +107,6 @@ function SidebarBody({
   activeHref: string;
   links: SidebarLinkItem[];
   secondaryLinks: SidebarLinkItem[];
-  toolsLinks: SidebarLinkItem[];
   sessionLinks: SidebarLinkItem[];
   onNavigate: () => void;
 }) {
@@ -138,15 +115,13 @@ function SidebarBody({
       <div className="space-y-6 overflow-y-auto">
         <Link href="/overview" onClick={onNavigate} className="block">
           <div className={cn("flex items-center gap-3 rounded-xl px-2 py-2 transition-all", open ? "justify-start" : "justify-center")}>
-            <div className="relative h-7 w-7 rounded-full border border-emerald-400/40 bg-emerald-500/20">
-              <div className="absolute left-2 top-1 h-5 w-2 rounded-r-full bg-emerald-300/90" />
-            </div>
+            <div className="h-7 w-7 rounded-lg border border-neutral-700 bg-neutral-900" />
             <motion.div
               animate={{ opacity: open ? 1 : 0, width: open ? "auto" : 0 }}
               className="overflow-hidden whitespace-nowrap"
             >
-              <p className="text-sm font-semibold tracking-[0.14em] text-neutral-100">YARAGENT</p>
-              <p className="text-[10px] uppercase tracking-[0.18em] text-neutral-500">Command Center</p>
+              <p className="text-sm font-semibold tracking-wide text-neutral-100">YARAgent</p>
+              <p className="text-xs text-neutral-500">Control Plane</p>
             </motion.div>
           </div>
         </Link>
@@ -157,17 +132,8 @@ function SidebarBody({
           ))}
         </nav>
 
-        <div className="pt-5">
-          <p className="px-2 text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">Command Tools</p>
-          <nav className="mt-2 space-y-1">
-            {toolsLinks.map((link) => (
-              <SidebarLink key={link.label} link={link} open={open} active={false} onNavigate={onNavigate} />
-            ))}
-          </nav>
-        </div>
-
-        <div className="pt-5">
-          <p className="px-2 text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">System</p>
+        <div className="pt-6">
+          <p className="px-2 text-xs font-medium tracking-wide text-neutral-500">Tools</p>
           <nav className="mt-2 space-y-1">
             {secondaryLinks.map((link) => (
               <SidebarLink key={link.label} link={link} open={open} active={false} onNavigate={onNavigate} />
@@ -177,10 +143,6 @@ function SidebarBody({
       </div>
 
       <div className="space-y-2 border-t border-neutral-800/70 pt-4">
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900/70 px-2 py-2">
-          <p className="text-xs font-medium text-neutral-300">Authenticated Operator</p>
-          <p className="text-[11px] text-neutral-500">admin</p>
-        </div>
         {sessionLinks.map((link) => (
           <SidebarLink key={link.label} link={link} open={open} active={false} onNavigate={onNavigate} />
         ))}
@@ -215,12 +177,12 @@ function SidebarLink({
         "group relative flex items-center rounded-xl px-2 py-2 transition-all duration-200",
         open ? "justify-start gap-3" : "justify-center",
         active
-          ? "border border-neutral-700 bg-neutral-700/50 text-white shadow-lg shadow-black/30"
+          ? "border border-neutral-700 bg-neutral-900 text-white shadow-lg shadow-black/30"
           : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100"
       )}
     >
       {active && <motion.div layoutId="manuarora-sidebar-active" className="absolute inset-0 rounded-xl" />}
-      <Icon className={cn("relative z-10 h-4 w-4", active ? "text-white" : "text-neutral-400")} />
+      <Icon className={cn("relative z-10 h-5 w-5", active ? "text-white" : "text-neutral-400")} />
       <motion.span
         animate={{ opacity: open ? 1 : 0, width: open ? "auto" : 0 }}
         className="relative z-10 overflow-hidden whitespace-nowrap text-sm font-medium"
