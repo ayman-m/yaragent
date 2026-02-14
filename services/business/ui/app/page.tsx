@@ -3,6 +3,7 @@
 import { useAgents } from "@/components/agent-context";
 import { ToolsStackCard } from "@/components/ui/tools-stack-card";
 import { WavyBackground } from "@/components/ui/wavy-background";
+import { motion } from "motion/react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -104,24 +105,111 @@ export default function HomePage() {
 
   return (
     <Shell title="Sign In" subtitle="Authenticate to manage agents" showToolsCard>
-      <AuthForm
-        onSubmit={handleLogin}
-        username={username}
-        setUsername={setUsername}
-        password={password}
-        setPassword={setPassword}
-        setupToken={setupToken}
-        setSetupToken={setSetupToken}
-        orgName={orgName}
-        setOrgName={setOrgName}
-        environment={environment}
-        setEnvironment={setEnvironment}
-        defaultRuleNamespace={defaultRuleNamespace}
-        setDefaultRuleNamespace={setDefaultRuleNamespace}
-        submitLabel={loading ? "Signing In..." : "Sign In"}
-        error={error}
-      />
+      <div className="grid gap-6 md:grid-cols-[1fr_auto_1fr] md:items-center">
+        <div>
+          <AuthForm
+            onSubmit={handleLogin}
+            username={username}
+            setUsername={setUsername}
+            password={password}
+            setPassword={setPassword}
+            setupToken={setupToken}
+            setSetupToken={setSetupToken}
+            orgName={orgName}
+            setOrgName={setOrgName}
+            environment={environment}
+            setEnvironment={setEnvironment}
+            defaultRuleNamespace={defaultRuleNamespace}
+            setDefaultRuleNamespace={setDefaultRuleNamespace}
+            submitLabel={loading ? "Signing In..." : "Sign In"}
+            error={error}
+          />
+        </div>
+
+        <div className="relative hidden h-52 w-px overflow-hidden md:block">
+          <motion.div
+            className="absolute inset-x-0 h-20 bg-gradient-to-b from-transparent via-cyan-300/90 to-transparent"
+            animate={{ y: ["-35%", "120%"], opacity: [0, 1, 0] }}
+            transition={{ duration: 3.2, repeat: Infinity, ease: "linear" }}
+          />
+          <div className="absolute inset-0 bg-slate-600/30" />
+        </div>
+
+        <div className="md:pl-2">
+          <p className="text-lg font-semibold text-slate-200">
+            Powered by{" "}
+            <FlippingText
+              words={["Next.js", "Grafana", "Loki", "Keycloak", "MCP"]}
+              className="text-cyan-300"
+            />
+          </p>
+          <p className="mt-3 text-sm leading-6 text-slate-300">
+            Unified control plane and telemetry for endpoint operations.
+            <br />
+            Secure workflows, real-time visibility, and scalable observability.
+          </p>
+        </div>
+      </div>
     </Shell>
+  );
+}
+
+function FlippingText({
+  words,
+  className,
+}: {
+  words: string[];
+  className?: string;
+}) {
+  const [currentWordIndex, setCurrentWordIndex] = useState(0);
+  const [visibleCharacters, setVisibleCharacters] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const currentWord = words[currentWordIndex];
+
+  useEffect(() => {
+    const typingSpeed = 45;
+    const deletingSpeed = 45;
+    const pauseBeforeDelete = 900;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+
+    if (!isDeleting && visibleCharacters < currentWord.length) {
+      timeout = setTimeout(() => setVisibleCharacters((prev) => prev + 1), typingSpeed);
+    } else if (!isDeleting && visibleCharacters === currentWord.length) {
+      timeout = setTimeout(() => setIsDeleting(true), pauseBeforeDelete);
+    } else if (isDeleting && visibleCharacters > 0) {
+      timeout = setTimeout(() => setVisibleCharacters((prev) => prev - 1), deletingSpeed);
+    } else if (isDeleting && visibleCharacters === 0) {
+      setIsDeleting(false);
+      setCurrentWordIndex((prev) => (prev + 1) % words.length);
+    }
+
+    return () => {
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [currentWord, isDeleting, visibleCharacters, words.length]);
+
+  return (
+    <span className={className}>
+      {currentWord
+        .substring(0, visibleCharacters)
+        .split("")
+        .map((char, index) => (
+          <motion.span
+            key={`${index}-${char}`}
+            initial={{ opacity: 0, rotateY: 90, y: 8, filter: "blur(8px)" }}
+            animate={{ opacity: 1, rotateY: 0, y: 0, filter: "blur(0px)" }}
+            transition={{ duration: 0.25 }}
+            className="inline-block"
+          >
+            {char}
+          </motion.span>
+        ))}
+      <motion.span
+        className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-cyan-300"
+        animate={{ opacity: [1, 0.25, 1] }}
+        transition={{ duration: 0.7, repeat: Infinity }}
+      />
+    </span>
   );
 }
 
