@@ -45,6 +45,7 @@ AGENT_EPHEMERAL_LEASE_SECONDS = int(os.getenv("AGENT_EPHEMERAL_LEASE_SECONDS", "
 AGENT_EPHEMERAL_GRACE_SECONDS = int(os.getenv("AGENT_EPHEMERAL_GRACE_SECONDS", "300"))
 AGENT_CLEANUP_INTERVAL_SECONDS = int(os.getenv("AGENT_CLEANUP_INTERVAL_SECONDS", "60"))
 AGENT_AUTO_DELETE_EPHEMERAL = (os.getenv("AGENT_AUTO_DELETE_EPHEMERAL", "true").strip().lower() in {"1", "true", "yes", "on"})
+AGENT_ORPHAN_DELETE_SECONDS = int(os.getenv("AGENT_ORPHAN_DELETE_SECONDS", "21600"))
 
 _db_pool: Optional[asyncpg.Pool] = None
 _cleanup_task: Optional[asyncio.Task] = None
@@ -219,6 +220,45 @@ async def _cleanup_expired_ephemeral_agents() -> int:
         return len(result)
 
 
+async def _cleanup_orphan_agents() -> int:
+    db = await _db()
+    async with db.acquire() as conn:
+        candidate_rows = await conn.fetch(
+            """
+            SELECT agent_id
+            FROM agents_control_state
+            WHERE updated_at < (now() - make_interval(secs => $1::int))
+              AND (
+                is_ephemeral = true
+                OR (
+                  (asset_profile_json = '{}'::jsonb OR asset_profile_json IS NULL)
+                  AND COALESCE(jsonb_array_length(sbom_json), 0) = 0
+                  AND COALESCE(jsonb_array_length(cve_json), 0) = 0
+                  AND last_heartbeat IS NULL
+                )
+              )
+            ORDER BY updated_at ASC
+            LIMIT 1000
+            """,
+            max(300, AGENT_ORPHAN_DELETE_SECONDS),
+        )
+        if not candidate_rows:
+            return 0
+        candidate_ids = [str(row["agent_id"]) for row in candidate_rows]
+        to_delete = [aid for aid in candidate_ids if aid not in agents]
+        if not to_delete:
+            return 0
+        result = await conn.fetch(
+            """
+            DELETE FROM agents_control_state
+            WHERE agent_id = ANY($1::text[])
+            RETURNING agent_id
+            """,
+            to_delete,
+        )
+        return len(result)
+
+
 async def _cleanup_loop() -> None:
     interval = max(10, AGENT_CLEANUP_INTERVAL_SECONDS)
     while True:
@@ -227,6 +267,9 @@ async def _cleanup_loop() -> None:
                 deleted = await _cleanup_expired_ephemeral_agents()
                 if deleted > 0:
                     logger.info("ephemeral cleanup removed %d expired agent records", deleted)
+                orphan_deleted = await _cleanup_orphan_agents()
+                if orphan_deleted > 0:
+                    logger.info("orphan cleanup removed %d stale/empty agent records", orphan_deleted)
         except Exception:
             logger.exception("ephemeral cleanup failed")
         await asyncio.sleep(interval)
@@ -513,7 +556,8 @@ async def list_agents(_: dict = Depends(get_current_user)):
         findings_count = int(row.get("findings_count") or 0)
 
         status = status_value
-        if last_heartbeat is not None and (now - last_heartbeat).total_seconds() > AGENT_STALE_SECONDS:
+        freshness_ts = last_heartbeat or last_seen or connected_at
+        if freshness_ts is not None and (now - freshness_ts).total_seconds() > AGENT_STALE_SECONDS:
             if status_value == "connected":
                 status = "stale"
 
