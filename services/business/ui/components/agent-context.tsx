@@ -77,13 +77,34 @@ function storeToken(token: string | null): void {
 }
 
 function ensureRecordArray(input: unknown): Array<Record<string, unknown>> {
-  if (Array.isArray(input)) {
-    return input.filter((x) => x && typeof x === "object") as Array<Record<string, unknown>>;
+  const normalized = parseMaybeJSON(input);
+  if (Array.isArray(normalized)) {
+    return normalized.filter((x) => x && typeof x === "object") as Array<Record<string, unknown>>;
   }
-  if (input && typeof input === "object") {
-    return [input as Record<string, unknown>];
+  if (normalized && typeof normalized === "object") {
+    return [normalized as Record<string, unknown>];
   }
   return [];
+}
+
+function ensureRecordObject(input: unknown): Record<string, unknown> {
+  const normalized = parseMaybeJSON(input);
+  if (normalized && typeof normalized === "object" && !Array.isArray(normalized)) {
+    return normalized as Record<string, unknown>;
+  }
+  return {};
+}
+
+function parseMaybeJSON(input: unknown): unknown {
+  if (typeof input !== "string") return input;
+  const trimmed = input.trim();
+  if (!trimmed) return input;
+  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return input;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return input;
+  }
 }
 
 export function AgentProvider({ children }: { children: React.ReactNode }) {
@@ -199,13 +220,13 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
           connectedAt: a.connected_at || null,
           lastSeen: a.last_seen || null,
           lastHeartbeat: a.last_heartbeat || null,
-          capabilities: (a.capabilities || {}) as Record<string, unknown>,
+          capabilities: ensureRecordObject(a.capabilities),
           isEphemeral: Boolean(a.is_ephemeral),
           instanceId: a.instance_id || null,
           runtimeKind: a.runtime_kind || null,
           leaseExpiresAt: a.lease_expires_at || null,
           findingsCount: Number(a.findings_count || 0),
-          assetProfile: (a.asset_profile || {}) as Record<string, unknown>,
+          assetProfile: ensureRecordObject(a.asset_profile),
         }))
       );
     } catch (err: any) {
@@ -262,7 +283,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         connectedAt: data.connected_at || null,
         lastSeen: data.last_seen || null,
         lastHeartbeat: data.last_heartbeat || null,
-        assetProfile: (data.asset_profile || {}) as Record<string, unknown>,
+        assetProfile: ensureRecordObject(data.asset_profile),
         sbom: ensureRecordArray(data.sbom),
         cves: ensureRecordArray(data.cves),
         findingsCount: Number(data.findings_count || 0),
