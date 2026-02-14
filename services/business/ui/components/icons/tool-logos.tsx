@@ -27,7 +27,7 @@ function SvgIcon({
 }
 
 export function NextjsLogo({ className }: { className?: string }) {
-  return <SvgIcon src="/icons/nextjs.svg" alt="Next.js" size={20} className={className} />;
+  return <SvgIcon src="/icons/nextjs.svg" alt="Next.js" size={20} className={cn("invert", className)} />;
 }
 
 export function GrafanaLogo({ className }: { className?: string }) {
@@ -43,6 +43,5 @@ export function GraphqlLogo({ className }: { className?: string }) {
 }
 
 export function MpcLogo({ className }: { className?: string }) {
-  return <SvgIcon src="/icons/mcp.svg" alt="Model Context Protocol" size={22} className={className} />;
+  return <SvgIcon src="/icons/mcp.svg" alt="Model Context Protocol" size={22} className={cn("invert", className)} />;
 }
-
