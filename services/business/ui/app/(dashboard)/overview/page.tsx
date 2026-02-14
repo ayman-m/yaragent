@@ -1,6 +1,7 @@
 "use client";
 
 import { useAgents } from "@/components/agent-context";
+import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { useMemo } from "react";
 
 export default function OverviewPage() {
@@ -12,10 +13,7 @@ export default function OverviewPage() {
 
   return (
     <>
-      <header className="border-b border-slate-800 bg-slate-900/70 px-4 py-4 md:px-8">
-        <h1 className="text-2xl font-bold md:text-3xl">Overview</h1>
-        <p className="mt-1 text-sm text-slate-400">Fleet status and control-plane posture</p>
-      </header>
+      <DashboardPageHeader title="Overview" subtitle="Fleet status and control-plane posture" />
 
       <main className="flex-1 overflow-y-auto p-4 md:p-8">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

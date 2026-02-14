@@ -1,12 +1,11 @@
 "use client";
 
+import { DashboardPageHeader } from "@/components/dashboard-page-header";
+
 export default function AlertsPage() {
   return (
     <>
-      <header className="border-b border-slate-800 bg-slate-900/70 px-4 py-4 md:px-8">
-        <h1 className="text-2xl font-bold md:text-3xl">Alerts</h1>
-        <p className="mt-1 text-sm text-slate-400">Surface error spikes and finding anomalies from telemetry</p>
-      </header>
+      <DashboardPageHeader title="Alerts" subtitle="Surface error spikes and finding anomalies from telemetry" />
 
       <main className="flex-1 overflow-y-auto p-4 md:p-8">
         <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">

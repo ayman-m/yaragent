@@ -2,27 +2,26 @@
 
 import { useAgents } from "@/components/agent-context";
 import { AgentCard } from "@/components/agent-card";
+import { DashboardPageHeader } from "@/components/dashboard-page-header";
 
 export default function AgentsPage() {
   const { agents, refreshAgents, pushRule, loading, error } = useAgents();
 
   return (
     <>
-      <header className="border-b border-slate-800 bg-slate-900/70 px-4 py-4 md:px-8">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold md:text-3xl">Agents</h1>
-            <p className="mt-1 text-sm text-slate-400">Connectivity, heartbeat, and policy push controls</p>
-          </div>
+      <DashboardPageHeader
+        title="Agents"
+        subtitle="Connectivity, heartbeat, and policy push controls"
+        action={
           <button
             onClick={refreshAgents}
             disabled={loading}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-lg border border-blue-400/30 bg-blue-500/85 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
           >
             {loading ? "Refreshing..." : "Refresh"}
           </button>
-        </div>
-      </header>
+        }
+      />
 
       <main className="flex-1 overflow-y-auto p-4 md:p-8">
         {error && (
