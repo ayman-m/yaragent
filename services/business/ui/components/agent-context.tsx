@@ -10,6 +10,24 @@ export interface Agent {
   lastSeen: string | null;
   lastHeartbeat: string | null;
   capabilities: Record<string, unknown>;
+  isEphemeral: boolean;
+  instanceId: string | null;
+  runtimeKind: string | null;
+  leaseExpiresAt: string | null;
+  findingsCount: number;
+  assetProfile: Record<string, unknown>;
+}
+
+export interface AgentProfile {
+  agentId: string;
+  tenantId: string;
+  connectedAt: string | null;
+  lastSeen: string | null;
+  lastHeartbeat: string | null;
+  assetProfile: Record<string, unknown>;
+  sbom: Array<Record<string, unknown>>;
+  cves: Array<Record<string, unknown>>;
+  findingsCount: number;
 }
 
 interface SetupSettings {
@@ -28,6 +46,7 @@ interface AgentContextType {
   token: string | null;
   refreshAgents: () => Promise<void>;
   pushRule: (agentId: string, ruleText: string) => Promise<any>;
+  getAgentProfile: (agentId: string) => Promise<AgentProfile>;
   checkSetupStatus: () => Promise<SetupStatus>;
   setupAdmin: (username: string, password: string, settings: SetupSettings, setupToken?: string) => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
@@ -164,6 +183,12 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
           lastSeen: a.last_seen || null,
           lastHeartbeat: a.last_heartbeat || null,
           capabilities: (a.capabilities || {}) as Record<string, unknown>,
+          isEphemeral: Boolean(a.is_ephemeral),
+          instanceId: a.instance_id || null,
+          runtimeKind: a.runtime_kind || null,
+          leaseExpiresAt: a.lease_expires_at || null,
+          findingsCount: Number(a.findings_count || 0),
+          assetProfile: (a.asset_profile || {}) as Record<string, unknown>,
         }))
       );
     } catch (err: any) {
@@ -199,6 +224,33 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     [token, withAuthHeaders, logout]
   );
 
+  const getAgentProfile = useCallback(
+    async (agentId: string): Promise<AgentProfile> => {
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
+      const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(agentId)}/profile`, {
+        headers: withAuthHeaders(),
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      return {
+        agentId: data.agent_id,
+        tenantId: data.tenant_id || "default",
+        connectedAt: data.connected_at || null,
+        lastSeen: data.last_seen || null,
+        lastHeartbeat: data.last_heartbeat || null,
+        assetProfile: (data.asset_profile || {}) as Record<string, unknown>,
+        sbom: (data.sbom || []) as Array<Record<string, unknown>>,
+        cves: (data.cves || []) as Array<Record<string, unknown>>,
+        findingsCount: Number(data.findings_count || 0),
+      };
+    },
+    [token, withAuthHeaders]
+  );
+
   return (
     <AgentContext.Provider
       value={{
@@ -206,6 +258,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         token,
         refreshAgents,
         pushRule,
+        getAgentProfile,
         checkSetupStatus,
         setupAdmin,
         login,
