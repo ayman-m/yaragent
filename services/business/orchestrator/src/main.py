@@ -41,11 +41,14 @@ POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "yaragent")
 AGENT_STALE_SECONDS = int(os.getenv("AGENT_STALE_SECONDS", "90"))
+AGENT_HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("AGENT_HEARTBEAT_INTERVAL_SECONDS", "30"))
+AGENT_MAX_MISSED_HEARTBEATS = int(os.getenv("AGENT_MAX_MISSED_HEARTBEATS", "3"))
 AGENT_EPHEMERAL_LEASE_SECONDS = int(os.getenv("AGENT_EPHEMERAL_LEASE_SECONDS", "120"))
 AGENT_EPHEMERAL_GRACE_SECONDS = int(os.getenv("AGENT_EPHEMERAL_GRACE_SECONDS", "300"))
 AGENT_CLEANUP_INTERVAL_SECONDS = int(os.getenv("AGENT_CLEANUP_INTERVAL_SECONDS", "60"))
 AGENT_AUTO_DELETE_EPHEMERAL = (os.getenv("AGENT_AUTO_DELETE_EPHEMERAL", "true").strip().lower() in {"1", "true", "yes", "on"})
 AGENT_ORPHAN_DELETE_SECONDS = int(os.getenv("AGENT_ORPHAN_DELETE_SECONDS", "21600"))
+AGENT_STALE_RETENTION_DAYS = int(os.getenv("AGENT_STALE_RETENTION_DAYS", "30"))
 
 _db_pool: Optional[asyncpg.Pool] = None
 _cleanup_task: Optional[asyncio.Task] = None
@@ -172,6 +175,8 @@ async def _upsert_agent_control_state(
             json.dumps(cve_snapshot) if cve_snapshot is not None else None,
             findings_count,
         )
+        if (status_value or "").strip().lower() == "connected":
+            await _restore_if_archived(conn, agent_id)
 
 
 def _is_truthy(value: Any) -> bool:
@@ -186,6 +191,15 @@ def _is_truthy(value: Any) -> bool:
 
 def _lease_expiry(now: datetime) -> datetime:
     return now + timedelta(seconds=max(30, AGENT_EPHEMERAL_LEASE_SECONDS))
+
+
+def _inactive_threshold_seconds() -> int:
+    from_heartbeat = max(1, AGENT_HEARTBEAT_INTERVAL_SECONDS) * max(1, AGENT_MAX_MISSED_HEARTBEATS)
+    return max(AGENT_STALE_SECONDS, from_heartbeat)
+
+
+async def _restore_if_archived(conn: asyncpg.Connection, agent_id: str) -> None:
+    await conn.execute("DELETE FROM agents_stale_state WHERE agent_id = $1", agent_id)
 
 
 async def _cleanup_expired_ephemeral_agents() -> int:
@@ -259,10 +273,114 @@ async def _cleanup_orphan_agents() -> int:
         return len(result)
 
 
+async def _archive_inactive_agents() -> int:
+    threshold_seconds = _inactive_threshold_seconds()
+    db = await _db()
+    async with db.acquire() as conn:
+        candidate_rows = await conn.fetch(
+            """
+            SELECT agent_id
+            FROM agents_control_state
+            WHERE (
+                status = 'disconnected'
+                OR (
+                    COALESCE(last_heartbeat, last_seen, connected_at) IS NOT NULL
+                    AND COALESCE(last_heartbeat, last_seen, connected_at) < (now() - make_interval(secs => $1::int))
+                )
+            )
+            ORDER BY updated_at ASC
+            LIMIT 2000
+            """,
+            threshold_seconds,
+        )
+        if not candidate_rows:
+            return 0
+        candidate_ids = [str(row["agent_id"]) for row in candidate_rows]
+        if not candidate_ids:
+            return 0
+        await conn.execute(
+            """
+            INSERT INTO agents_stale_state (
+                agent_id, tenant_id, status, connected_at, last_seen, last_heartbeat,
+                capabilities_json, is_ephemeral, instance_id, runtime_kind, lease_expires_at,
+                asset_profile_json, sbom_json, cve_json, findings_count,
+                policy_version, policy_hash, last_policy_applied_at, last_policy_result,
+                updated_at, archived_reason, archived_at
+            )
+            SELECT
+                a.agent_id, a.tenant_id, a.status, a.connected_at, a.last_seen, a.last_heartbeat,
+                a.capabilities_json, a.is_ephemeral, a.instance_id, a.runtime_kind, a.lease_expires_at,
+                a.asset_profile_json, a.sbom_json, a.cve_json, a.findings_count,
+                a.policy_version, a.policy_hash, a.last_policy_applied_at, a.last_policy_result,
+                a.updated_at,
+                CASE
+                    WHEN a.status = 'disconnected' THEN 'disconnected'
+                    WHEN a.last_heartbeat IS NULL THEN 'missing_heartbeat'
+                    ELSE 'stale_heartbeat'
+                END AS archived_reason,
+                now() AS archived_at
+            FROM agents_control_state a
+            WHERE a.agent_id = ANY($1::text[])
+            ON CONFLICT (agent_id) DO UPDATE SET
+                tenant_id = EXCLUDED.tenant_id,
+                status = EXCLUDED.status,
+                connected_at = EXCLUDED.connected_at,
+                last_seen = EXCLUDED.last_seen,
+                last_heartbeat = EXCLUDED.last_heartbeat,
+                capabilities_json = EXCLUDED.capabilities_json,
+                is_ephemeral = EXCLUDED.is_ephemeral,
+                instance_id = EXCLUDED.instance_id,
+                runtime_kind = EXCLUDED.runtime_kind,
+                lease_expires_at = EXCLUDED.lease_expires_at,
+                asset_profile_json = EXCLUDED.asset_profile_json,
+                sbom_json = EXCLUDED.sbom_json,
+                cve_json = EXCLUDED.cve_json,
+                findings_count = EXCLUDED.findings_count,
+                policy_version = EXCLUDED.policy_version,
+                policy_hash = EXCLUDED.policy_hash,
+                last_policy_applied_at = EXCLUDED.last_policy_applied_at,
+                last_policy_result = EXCLUDED.last_policy_result,
+                updated_at = EXCLUDED.updated_at,
+                archived_reason = EXCLUDED.archived_reason,
+                archived_at = EXCLUDED.archived_at
+            """,
+            candidate_ids,
+        )
+        result = await conn.fetch(
+            """
+            DELETE FROM agents_control_state
+            WHERE agent_id = ANY($1::text[])
+            RETURNING agent_id
+            """,
+            candidate_ids,
+        )
+        return len(result)
+
+
+async def _purge_old_stale_agents() -> int:
+    db = await _db()
+    async with db.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            DELETE FROM agents_stale_state
+            WHERE archived_at < (now() - make_interval(days => $1::int))
+            RETURNING agent_id
+            """,
+            max(1, AGENT_STALE_RETENTION_DAYS),
+        )
+        return len(rows)
+
+
 async def _cleanup_loop() -> None:
     interval = max(10, AGENT_CLEANUP_INTERVAL_SECONDS)
     while True:
         try:
+            archived = await _archive_inactive_agents()
+            if archived > 0:
+                logger.info("inactive archival moved %d agents to stale table", archived)
+            purged = await _purge_old_stale_agents()
+            if purged > 0:
+                logger.info("stale retention purge removed %d archived agents", purged)
             if AGENT_AUTO_DELETE_EPHEMERAL:
                 deleted = await _cleanup_expired_ephemeral_agents()
                 if deleted > 0:
@@ -379,6 +497,16 @@ async def startup() -> None:
             min_size=1,
             max_size=10,
         )
+    # Run one archival/retention sweep at startup so UI immediately hides stale/disconnected rows.
+    try:
+        archived = await _archive_inactive_agents()
+        if archived > 0:
+            logger.info("startup archival moved %d agents to stale table", archived)
+        purged = await _purge_old_stale_agents()
+        if purged > 0:
+            logger.info("startup stale retention purge removed %d agents", purged)
+    except Exception:
+        logger.exception("startup archival sweep failed")
     _cleanup_task = asyncio.create_task(_cleanup_loop())
 
 

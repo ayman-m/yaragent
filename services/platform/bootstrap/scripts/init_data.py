@@ -227,6 +227,42 @@ def init_postgres_schema() -> None:
                 )
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS agents_stale_state (
+                    agent_id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL DEFAULT 'default',
+                    status TEXT NOT NULL DEFAULT 'disconnected',
+                    connected_at TIMESTAMPTZ,
+                    last_seen TIMESTAMPTZ,
+                    last_heartbeat TIMESTAMPTZ,
+                    capabilities_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    is_ephemeral BOOLEAN NOT NULL DEFAULT false,
+                    instance_id TEXT,
+                    runtime_kind TEXT,
+                    lease_expires_at TIMESTAMPTZ,
+                    asset_profile_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    sbom_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    cve_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    findings_count INTEGER NOT NULL DEFAULT 0,
+                    policy_version TEXT,
+                    policy_hash TEXT,
+                    last_policy_applied_at TIMESTAMPTZ,
+                    last_policy_result TEXT,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    archived_reason TEXT NOT NULL DEFAULT 'stale',
+                    archived_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
+            cur.execute("ALTER TABLE agents_stale_state ADD COLUMN IF NOT EXISTS archived_reason TEXT NOT NULL DEFAULT 'stale'")
+            cur.execute("ALTER TABLE agents_stale_state ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ NOT NULL DEFAULT now()")
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_agents_stale_state_archived_at
+                ON agents_stale_state (archived_at DESC)
+                """
+            )
 
 
 def main() -> None:
