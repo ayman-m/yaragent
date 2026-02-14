@@ -1,6 +1,7 @@
 "use client";
 
 import { useAgents } from "@/components/agent-context";
+import { LoaderThree } from "@/components/ui/loader";
 import { ToolsStackCard } from "@/components/ui/tools-stack-card";
 import { WavyBackground } from "@/components/ui/wavy-background";
 import { motion } from "motion/react";
@@ -74,7 +75,14 @@ export default function HomePage() {
   };
 
   if (mode === "loading") {
-    return <Shell title="Loading">Checking setup status...</Shell>;
+    return (
+      <Shell title="Loading">
+        <div className="flex flex-col items-center gap-3 py-4">
+          <LoaderThree />
+          <p className="text-sm text-slate-300">Checking setup status...</p>
+        </div>
+      </Shell>
+    );
   }
 
   if (mode === "setup") {
