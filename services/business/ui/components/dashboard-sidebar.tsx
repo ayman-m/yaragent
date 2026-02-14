@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { GlareCard } from "@/components/ui/glare-card";
 import {
   IconActivityHeartbeat,
   IconBellRinging,
@@ -114,15 +115,31 @@ function SidebarBody({
     <div className="flex h-full flex-col justify-between">
       <div className="space-y-6 overflow-y-auto">
         <Link href="/overview" onClick={onNavigate} className="block">
-          <div className={cn("flex items-center gap-3 rounded-xl px-2 py-2 transition-all", open ? "justify-start" : "justify-center")}>
-            <div className="h-7 w-7 rounded-lg border border-neutral-700 bg-neutral-900" />
-            <motion.div
-              animate={{ opacity: open ? 1 : 0, width: open ? "auto" : 0 }}
-              className="overflow-hidden whitespace-nowrap"
-            >
-              <p className="text-sm font-semibold tracking-wide text-neutral-100">YARAgent</p>
-              <p className="text-xs text-neutral-500">Control Plane</p>
-            </motion.div>
+          <div className={cn("rounded-xl transition-all", open ? "px-1 py-1" : "px-0 py-1")}>
+            <GlareCard containerClassName={cn(open ? "w-full" : "w-10 [aspect-ratio:1/1]")} className="flex items-center justify-center">
+              <div className={cn("flex items-center gap-3", open ? "justify-start px-3" : "justify-center")}>
+                <svg
+                  width="44"
+                  height="44"
+                  viewBox="0 0 66 65"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-6 w-6 text-white"
+                >
+                  <path
+                    d="M8 8.05571C8 8.05571 54.9009 18.1782 57.8687 30.062C60.8365 41.9458 9.05432 57.4696 9.05432 57.4696"
+                    stroke="currentColor"
+                    strokeWidth="12"
+                    strokeMiterlimit="3.86874"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <motion.div animate={{ opacity: open ? 1 : 0, width: open ? "auto" : 0 }} className="overflow-hidden whitespace-nowrap">
+                  <p className="text-sm font-semibold tracking-wide text-neutral-100">YARAgent</p>
+                  <p className="text-xs text-neutral-400">Control Plane</p>
+                </motion.div>
+              </div>
+            </GlareCard>
           </div>
         </Link>
 
