@@ -172,6 +172,10 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     setAgents([]);
   }, []);
 
+  const handleUnauthorized = useCallback(() => {
+    logout();
+  }, [logout]);
+
   const refreshAgents = useCallback(async () => {
     if (!token) return;
     setLoading(true);
@@ -181,6 +185,9 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         headers: withAuthHeaders(),
       });
       if (!res.ok) {
+        if (res.status === 401) {
+          handleUnauthorized();
+        }
         throw new Error(`HTTP ${res.status}`);
       }
       const data = await res.json();
@@ -207,7 +214,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [token, withAuthHeaders]);
+  }, [token, withAuthHeaders, handleUnauthorized]);
 
   const pushRule = useCallback(
     async (agentId: string, ruleText: string) => {
@@ -243,6 +250,9 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         headers: withAuthHeaders(),
       });
       if (!res.ok) {
+        if (res.status === 401) {
+          handleUnauthorized();
+        }
         throw new Error(`HTTP ${res.status}`);
       }
       const data = await res.json();
@@ -258,7 +268,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         findingsCount: Number(data.findings_count || 0),
       };
     },
-    [token, withAuthHeaders]
+    [token, withAuthHeaders, handleUnauthorized]
   );
 
   return (
