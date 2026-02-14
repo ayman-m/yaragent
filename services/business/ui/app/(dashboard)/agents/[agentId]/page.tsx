@@ -46,24 +46,39 @@ export default function AgentDetailPage() {
   const safeSbom = Array.isArray(profile?.sbom) ? profile.sbom : [];
   const safeCves = Array.isArray(profile?.cves) ? profile.cves : [];
   const title = String(profile?.assetProfile?.asset_name || agentId || "Agent");
+  const asset = (profile?.assetProfile || {}) as Record<string, unknown>;
+  const os = ((asset.os as Record<string, unknown> | undefined) || {}) as Record<string, unknown>;
+  const hardware = ((asset.hardware as Record<string, unknown> | undefined) || {}) as Record<string, unknown>;
+  const network = ((asset.network as Record<string, unknown> | undefined) || {}) as Record<string, unknown>;
+  const identity = ((asset.identity as Record<string, unknown> | undefined) || {}) as Record<string, unknown>;
+  const posture = ((asset.posture as Record<string, unknown> | undefined) || {}) as Record<string, unknown>;
 
   const tabs = useMemo(
     () => [
       {
-        title: "Overview",
-        value: "overview",
+        title: "Information",
+        value: "information",
         content: (
-          <TabCanvas title="Overview">
+          <TabCanvas title="Information">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <Info label="Agent ID" value={profile?.agentId || "n/a"} mono />
-              <Info label="Tenant" value={profile?.tenantId || "default"} />
-              <Info label="Provider" value={String(profile?.assetProfile?.provider || "unknown")} />
-              <Info label="Cloud Region" value={String(profile?.assetProfile?.cloud_region || "unknown")} />
-              <Info label="Account ID" value={String(profile?.assetProfile?.account_id || "unknown")} />
-              <Info label="Asset Category" value={String(profile?.assetProfile?.asset_category || "unknown")} />
-              <Info label="OS" value={String((profile?.assetProfile?.os as Record<string, unknown> | undefined)?.name || "unknown")} />
-              <Info label="Runtime" value={String(profile?.assetProfile?.runtime_kind || "unknown")} />
-              <Info label="Findings" value={String(profile?.findingsCount || 0)} />
+              <Info label="Agent ID" value={asDisplay(profile?.agentId)} mono />
+              <Info label="Hostname" value={asDisplay(asset.asset_name)} />
+              <Info label="Tenant" value={asDisplay(profile?.tenantId)} />
+              <Info label="Provider" value={asDisplay(asset.provider)} />
+              <Info label="Cloud Region" value={asDisplay(asset.cloud_region)} />
+              <Info label="Account ID" value={asDisplay(asset.account_id)} />
+              <Info label="Asset Category" value={asDisplay(asset.asset_category)} />
+              <Info label="Runtime" value={asDisplay(asset.runtime_kind)} />
+              <Info label="OS Name" value={asDisplay(os.name)} />
+              <Info label="OS Version" value={asDisplay(os.version)} />
+              <Info label="Kernel" value={asDisplay(os.kernel)} />
+              <Info label="Architecture" value={asDisplay(os.architecture)} />
+              <Info label="CPU Cores" value={asDisplay(hardware.cpu_cores)} />
+              <Info label="Memory (MB)" value={asDisplay(hardware.memory_mb)} />
+              <Info label="Primary IP" value={asDisplay(network.primary_ip)} />
+              <Info label="MAC Address" value={asDisplay(network.mac_address)} />
+              <Info label="Domain" value={asDisplay(identity.domain)} />
+              <Info label="Logged User" value={asDisplay(identity.username)} />
               <Info label="First Seen" value={formatTs(profile?.connectedAt || null)} />
               <Info label="Last Seen" value={formatTs(profile?.lastSeen || null)} />
               <Info label="Last Heartbeat" value={formatTs(profile?.lastHeartbeat || null)} />
@@ -72,16 +87,21 @@ export default function AgentDetailPage() {
         ),
       },
       {
-        title: "SBOM",
-        value: "sbom",
+        title: "Software",
+        value: "software",
         content: (
-          <TabCanvas title="SBOM">
+          <TabCanvas title="Software">
+            <div className="mb-4 grid gap-3 md:grid-cols-3">
+              <Info label="SBOM Packages" value={asDisplay(safeSbom.length)} />
+              <Info label="Package Managers" value={asDisplay(uniqueCount(safeSbom, "type"))} />
+              <Info label="Top Ecosystem" value={asDisplay(topByField(safeSbom, "type"))} />
+            </div>
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-400/30 text-left text-slate-300">
                   <th className="px-2 py-2">Name</th>
                   <th className="px-2 py-2">Version</th>
-                  <th className="px-2 py-2">Type</th>
+                  <th className="px-2 py-2">Ecosystem</th>
                 </tr>
               </thead>
               <tbody>
@@ -106,10 +126,35 @@ export default function AgentDetailPage() {
         ),
       },
       {
-        title: "Vulnerabilities",
-        value: "cves",
+        title: "Posture",
+        value: "posture",
         content: (
-          <TabCanvas title="Vulnerabilities">
+          <TabCanvas title="Posture">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <Info label="Findings" value={asDisplay(profile?.findingsCount)} />
+              <Info label="CVEs" value={asDisplay(safeCves.length)} />
+              <Info label="Compliance" value={asDisplay(posture.compliance_status)} />
+              <Info label="Patch Level" value={asDisplay(posture.patch_level)} />
+              <Info label="Hardening Profile" value={asDisplay(posture.hardening_profile)} />
+              <Info label="Risk Score" value={asDisplay(posture.risk_score)} />
+              <Info label="Identity Risk" value={asDisplay(posture.identity_risk)} />
+              <Info label="Network Exposure" value={asDisplay(posture.network_exposure)} />
+              <Info label="Last Scan" value={formatTs(asMaybeString(posture.last_scan_at))} />
+            </div>
+          </TabCanvas>
+        ),
+      },
+      {
+        title: "Detections",
+        value: "detections",
+        content: (
+          <TabCanvas title="Detections">
+            <div className="mb-4 grid gap-3 md:grid-cols-4">
+              <Info label="Total CVEs" value={asDisplay(safeCves.length)} />
+              <Info label="Critical" value={asDisplay(countBySeverity(safeCves, "critical"))} />
+              <Info label="High" value={asDisplay(countBySeverity(safeCves, "high"))} />
+              <Info label="Resolved" value={asDisplay(countByStatus(safeCves, "resolved"))} />
+            </div>
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-400/30 text-left text-slate-300">
@@ -139,30 +184,8 @@ export default function AgentDetailPage() {
           </TabCanvas>
         ),
       },
-      {
-        title: "Network",
-        value: "network",
-        content: (
-          <TabCanvas title="Network">
-            <pre className="max-h-[22rem] overflow-auto rounded-xl bg-slate-950/70 p-4 text-xs text-slate-200">
-              {JSON.stringify((profile?.assetProfile?.network as Record<string, unknown> | undefined) || {}, null, 2)}
-            </pre>
-          </TabCanvas>
-        ),
-      },
-      {
-        title: "Agent Information",
-        value: "agent-info",
-        content: (
-          <TabCanvas title="Agent Information">
-            <pre className="max-h-[22rem] overflow-auto rounded-xl bg-slate-950/70 p-4 text-xs text-slate-200">
-              {JSON.stringify(profile || {}, null, 2)}
-            </pre>
-          </TabCanvas>
-        ),
-      },
     ],
-    [profile, safeSbom, safeCves]
+    [profile, safeSbom, safeCves, asset, os, hardware, network, identity, posture]
   );
 
   return (
@@ -229,8 +252,50 @@ function Info({ label, value, mono = false }: { label: string; value: string; mo
 }
 
 function formatTs(value: string | null) {
-  if (!value) return "n/a";
+  if (!value) return "Unknown";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleString();
+}
+
+function asDisplay(value: unknown): string {
+  if (value === null || value === undefined) return "Unknown";
+  const str = String(value).trim();
+  return str.length > 0 ? str : "Unknown";
+}
+
+function asMaybeString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const str = value.trim();
+  return str.length > 0 ? str : null;
+}
+
+function uniqueCount(rows: Array<Record<string, unknown>>, key: string): string {
+  if (!rows.length) return "Unknown";
+  const values = new Set(rows.map((r) => asDisplay(r[key])).filter((v) => v !== "Unknown"));
+  return values.size > 0 ? String(values.size) : "Unknown";
+}
+
+function topByField(rows: Array<Record<string, unknown>>, key: string): string {
+  if (!rows.length) return "Unknown";
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const value = asDisplay(row[key]);
+    if (value === "Unknown") continue;
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  if (counts.size === 0) return "Unknown";
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+}
+
+function countBySeverity(rows: Array<Record<string, unknown>>, severity: string): string {
+  if (!rows.length) return "Unknown";
+  const count = rows.filter((row) => String(row.severity || "").toLowerCase() === severity).length;
+  return String(count);
+}
+
+function countByStatus(rows: Array<Record<string, unknown>>, status: string): string {
+  if (!rows.length) return "Unknown";
+  const count = rows.filter((row) => String(row.status || "").toLowerCase() === status).length;
+  return String(count);
 }
