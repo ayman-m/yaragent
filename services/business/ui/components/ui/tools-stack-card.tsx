@@ -1,10 +1,10 @@
 "use client";
 
 import {
-  DockerLogo,
+  GeminiLogo,
   GrafanaLogo,
-  KeycloakLogo,
-  LokiLogo,
+  GraphqlLogo,
+  MpcLogo,
   NextjsLogo,
 } from "@/components/icons/tool-logos";
 import { cn } from "@/lib/utils";
@@ -12,11 +12,11 @@ import { animate, motion } from "motion/react";
 import { useEffect, useMemo } from "react";
 
 const logoItems = [
-  { key: "nextjs", node: <NextjsLogo className="h-7 w-7 text-white" /> },
-  { key: "grafana", node: <GrafanaLogo className="h-7 w-7" /> },
-  { key: "loki", node: <LokiLogo className="h-7 w-7" /> },
-  { key: "keycloak", node: <KeycloakLogo className="h-7 w-7" /> },
-  { key: "docker", node: <DockerLogo className="h-7 w-7" /> },
+  { key: "nextjs", node: <NextjsLogo className="h-5 w-5 opacity-95" /> },
+  { key: "grafana", node: <GrafanaLogo className="h-6 w-6 opacity-95" /> },
+  { key: "graphql", node: <GraphqlLogo className="h-5 w-5 opacity-95" /> },
+  { key: "gemini", node: <GeminiLogo className="h-5 w-5 opacity-95" /> },
+  { key: "mcp", node: <MpcLogo className="h-6 w-6 opacity-95" /> },
 ];
 
 export function ToolsStackCard() {
@@ -33,7 +33,7 @@ export function ToolsStackCard() {
   useEffect(() => {
     animate(sequence, {
       repeat: Infinity,
-      repeatDelay: 1.2,
+      repeatDelay: 1,
     });
   }, [sequence]);
 
@@ -44,7 +44,7 @@ export function ToolsStackCard() {
       </CardSkeletonContainer>
       <CardTitle>Built with modern infrastructure</CardTitle>
       <CardDescription>
-        Next.js UI with Grafana, Loki, Alloy, Keycloak, and Docker powering telemetry and control workflows.
+        Next.js UI with Grafana telemetry, GraphQL APIs, Gemini-assisted flows, and MCP-compatible integrations.
       </CardDescription>
     </Card>
   );
@@ -53,14 +53,15 @@ export function ToolsStackCard() {
 const Skeleton = () => {
   return (
     <div className="relative flex h-full items-center justify-center overflow-hidden p-8">
-      <div className="flex shrink-0 items-center justify-center gap-3">
+      <div className="relative z-20 flex shrink-0 items-center justify-center gap-2">
         {logoItems.map((item, index) => (
           <Container
             key={item.key}
             className={cn(
               `tool-pill-${index}`,
-              index % 2 === 0 ? "h-10 w-10" : "h-14 w-14",
-              index === 2 && "h-16 w-16 ring-1 ring-white/20"
+              index % 2 === 0 ? "h-8 w-8" : "h-12 w-12",
+              index === 1 && "h-16 w-16 ring-1 ring-white/20",
+              index === 2 && "h-14 w-14 ring-1 ring-fuchsia-200/20"
             )}
           >
             {item.node}
@@ -68,11 +69,15 @@ const Skeleton = () => {
         ))}
       </div>
 
-      <div className="animate-move absolute top-8 z-40 m-auto h-40 w-px bg-gradient-to-b from-transparent via-cyan-400/80 to-transparent">
-        <div className="absolute -left-10 top-1/2 h-32 w-10 -translate-y-1/2">
+      <motion.div
+        className="absolute top-8 left-1/2 z-40 h-40 w-px bg-gradient-to-b from-transparent via-cyan-400/80 to-transparent"
+        animate={{ x: [-130, 130, -130] }}
+        transition={{ duration: 4.2, ease: "easeInOut", repeat: Infinity }}
+      >
+        <div className="absolute -left-10 top-1/2 h-32 w-12 -translate-y-1/2">
           <Sparkles />
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };

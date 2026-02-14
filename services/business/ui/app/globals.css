@@ -18,22 +18,3 @@ body {
   height: 100%;
   width: 100%;
 }
-
-@keyframes move {
-  0% {
-    transform: translateY(-8px);
-    opacity: 0.55;
-  }
-  50% {
-    transform: translateY(8px);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(-8px);
-    opacity: 0.55;
-  }
-}
-
-.animate-move {
-  animation: move 2.8s ease-in-out infinite;
-}
