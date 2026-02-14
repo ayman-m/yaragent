@@ -10,8 +10,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	osuser "os/user"
@@ -265,6 +265,93 @@ func readTotalMemoryBytes() int64 {
 	return 0
 }
 
+func readOSRelease() map[string]string {
+	out := map[string]string{}
+	b, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return out
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || !strings.Contains(line, "=") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		key := strings.TrimSpace(parts[0])
+		val := strings.Trim(strings.TrimSpace(parts[1]), "\"")
+		out[key] = val
+	}
+	return out
+}
+
+func readDNSServers() []string {
+	out := []string{}
+	b, err := os.ReadFile("/etc/resolv.conf")
+	if err != nil {
+		return out
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "nameserver ") {
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				out = append(out, parts[1])
+			}
+		}
+	}
+	return out
+}
+
+func firstNonLoopbackIPv4() string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil {
+				continue
+			}
+			ip = ip.To4()
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			return ip.String()
+		}
+	}
+	return ""
+}
+
+func firstMACAddress() string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		if mac := strings.TrimSpace(iface.HardwareAddr.String()); mac != "" {
+			return mac
+		}
+	}
+	return ""
+}
+
 func collectNetworkInterfaces() []map[string]any {
 	out := make([]map[string]any, 0)
 	ifaces, err := net.Interfaces()
@@ -293,13 +380,54 @@ func collectNetworkInterfaces() []map[string]any {
 	return out
 }
 
-func collectAssetProfile(agentID, instanceID string, containerized bool) map[string]any {
+func collectAssetProfile(agentID, instanceID string, containerized bool, cveSnapshot []map[string]any) map[string]any {
 	host, _ := os.Hostname()
 	currentUser := "unknown"
 	if u, err := osuser.Current(); err == nil {
 		if strings.TrimSpace(u.Username) != "" {
 			currentUser = u.Username
 		}
+	}
+	domain := "unknown"
+	username := currentUser
+	if strings.Contains(currentUser, `\`) {
+		parts := strings.SplitN(currentUser, `\`, 2)
+		if len(parts) == 2 {
+			domain = strings.TrimSpace(parts[0])
+			username = strings.TrimSpace(parts[1])
+		}
+	}
+	if strings.Contains(currentUser, "@") {
+		parts := strings.SplitN(currentUser, "@", 2)
+		if len(parts) == 2 {
+			username = strings.TrimSpace(parts[0])
+			domain = strings.TrimSpace(parts[1])
+		}
+	}
+	osRelease := readOSRelease()
+	primaryIP := firstNonLoopbackIPv4()
+	primaryMAC := firstMACAddress()
+	memBytes := readTotalMemoryBytes()
+	memMB := int64(0)
+	if memBytes > 0 {
+		memMB = memBytes / (1024 * 1024)
+	}
+	sevCount := map[string]int{
+		"critical": 0,
+		"high":     0,
+		"medium":   0,
+		"low":      0,
+	}
+	for _, c := range cveSnapshot {
+		sev := strings.ToLower(strings.TrimSpace(fmt.Sprint(c["severity"])))
+		if _, ok := sevCount[sev]; ok {
+			sevCount[sev]++
+		}
+	}
+	riskScore := sevCount["critical"]*10 + sevCount["high"]*6 + sevCount["medium"]*3 + sevCount["low"]
+	complianceStatus := "Compliant"
+	if len(cveSnapshot) > 0 {
+		complianceStatus = "Needs Review"
 	}
 	groupsRaw := strings.TrimSpace(os.Getenv("ASSET_GROUPS"))
 	groups := []string{}
@@ -317,24 +445,39 @@ func collectAssetProfile(agentID, instanceID string, containerized bool) map[str
 		"cloud_region": envOrDefault("CLOUD_REGION", "unknown"),
 		"account_id":   envOrDefault("CLOUD_ACCOUNT_ID", "unknown"),
 		"asset_category": envOrDefault("ASSET_CATEGORY", "host"),
-		"instance_id":  instanceID,
-		"runtime_kind": map[bool]string{true: "container", false: "host"}[containerized],
+		"instance_id":    instanceID,
+		"runtime_kind":   map[bool]string{true: "container", false: "host"}[containerized],
 		"os": map[string]any{
-			"name":       runtime.GOOS,
-			"arch":       runtime.GOARCH,
-			"go_version": runtime.Version(),
+			"name":         envOrDefault("OS_NAME", strings.TrimSpace(osRelease["NAME"])),
+			"version":      envOrDefault("OS_VERSION", strings.TrimSpace(osRelease["VERSION"])),
+			"kernel":       envOrDefault("OS_KERNEL", strings.TrimSpace(osRelease["KERNEL"])),
+			"architecture": runtime.GOARCH,
+			"go_version":   runtime.Version(),
 		},
 		"hardware": map[string]any{
-			"cpu_cores":          runtime.NumCPU(),
-			"memory_total_bytes": readTotalMemoryBytes(),
+			"cpu_cores": runtime.NumCPU(),
+			"memory_mb": memMB,
 		},
 		"network": map[string]any{
-			"interfaces": collectNetworkInterfaces(),
+			"primary_ip":  envOrDefault("PRIMARY_IP", primaryIP),
+			"mac_address": envOrDefault("PRIMARY_MAC", primaryMAC),
+			"dns_servers": readDNSServers(),
+			"interfaces":  collectNetworkInterfaces(),
 		},
-		"user": map[string]any{
-			"current_user": currentUser,
+		"identity": map[string]any{
+			"username": username,
+			"domain":   domain,
 		},
 		"asset_groups": groups,
+		"posture": map[string]any{
+			"compliance_status": complianceStatus,
+			"patch_level":       envOrDefault("PATCH_LEVEL", "Unknown"),
+			"hardening_profile": envOrDefault("HARDENING_PROFILE", "Baseline"),
+			"risk_score":        riskScore,
+			"identity_risk":     envOrDefault("IDENTITY_RISK", "Low"),
+			"network_exposure":  envOrDefault("NETWORK_EXPOSURE", "Medium"),
+			"last_scan_at":      time.Now().UTC().Format(time.RFC3339),
+		},
 		"last_scanned": time.Now().UTC().Format(time.RFC3339),
 	}
 }
@@ -374,6 +517,13 @@ func collectSBOMSnapshot() []map[string]any {
 }
 
 func collectCVESnapshot() []map[string]any {
+	if rawJSON := strings.TrimSpace(os.Getenv("MOCK_CVES_JSON")); rawJSON != "" {
+		items := []map[string]any{}
+		if err := json.Unmarshal([]byte(rawJSON), &items); err == nil {
+			return items
+		}
+		log.Printf("warning: failed to parse MOCK_CVES_JSON, falling back to MOCK_CVES")
+	}
 	raw := strings.TrimSpace(os.Getenv("MOCK_CVES"))
 	if raw == "" {
 		return []map[string]any{}
@@ -384,10 +534,22 @@ func collectCVESnapshot() []map[string]any {
 		if id == "" {
 			continue
 		}
+		severity := "unknown"
+		status := "open"
+		if strings.Contains(id, ":") {
+			parts := strings.SplitN(id, ":", 3)
+			id = strings.TrimSpace(parts[0])
+			if len(parts) > 1 && strings.TrimSpace(parts[1]) != "" {
+				severity = strings.ToLower(strings.TrimSpace(parts[1]))
+			}
+			if len(parts) > 2 && strings.TrimSpace(parts[2]) != "" {
+				status = strings.ToLower(strings.TrimSpace(parts[2]))
+			}
+		}
 		items = append(items, map[string]any{
 			"id":       id,
-			"severity": "unknown",
-			"status":   "open",
+			"severity": severity,
+			"status":   status,
 		})
 	}
 	return items
@@ -419,11 +581,6 @@ func main() {
 	query.Set("instance_id", instanceID)
 	u.RawQuery = query.Encode()
 	log.Printf("using stable agent_id=%s", agentID)
-	assetProfile := collectAssetProfile(agentID, instanceID, containerized)
-	sbomSnapshot := collectSBOMSnapshot()
-	cveSnapshot := collectCVESnapshot()
-	findingsCount := len(cveSnapshot)
-
 	telemetry := NewTelemetryClient(
 		envBool("TELEMETRY_ENABLED", false),
 		envOrDefault("TELEMETRY_PUSH_URL", "http://alloy:9999/loki/api/v1/push"),
@@ -477,6 +634,10 @@ func main() {
 				case <-done:
 					return
 				case <-ticker.C:
+					sbomSnapshot := collectSBOMSnapshot()
+					cveSnapshot := collectCVESnapshot()
+					findingsCount := len(cveSnapshot)
+					assetProfile := collectAssetProfile(agentID, instanceID, containerized, cveSnapshot)
 					hb := map[string]any{
 						"type":        "agent.heartbeat",
 						"agent_id":    agentID,
