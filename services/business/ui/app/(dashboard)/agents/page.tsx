@@ -66,6 +66,7 @@ export default function AgentsPage() {
         title="Agents"
         subtitle="Connectivity, heartbeat, and policy push controls"
         flipSubtitle
+        flipWords={["Inventory", "Heartbeat", "Policy", "Detections"]}
         action={
           <button
             onClick={refreshAgents}

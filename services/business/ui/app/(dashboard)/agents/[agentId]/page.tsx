@@ -190,7 +190,12 @@ export default function AgentDetailPage() {
 
   return (
     <>
-      <DashboardPageHeader title={title} subtitle="Agent profile and inventory details" flipSubtitle />
+      <DashboardPageHeader
+        title={title}
+        subtitle="Agent profile and inventory details"
+        flipSubtitle
+        flipWords={["Information", "Software", "Posture", "Detections"]}
+      />
 
       <main className="flex-1 overflow-y-auto p-4 md:p-8">
         <div className="mb-4">
