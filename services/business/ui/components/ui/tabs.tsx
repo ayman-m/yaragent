@@ -15,12 +15,16 @@ export const Tabs = ({
   tabs: propTabs,
   containerClassName,
   activeTabClassName,
+  activeTabTextClassName,
+  inactiveTabTextClassName,
   tabClassName,
   contentClassName,
 }: {
   tabs: Tab[];
   containerClassName?: string;
   activeTabClassName?: string;
+  activeTabTextClassName?: string;
+  inactiveTabTextClassName?: string;
   tabClassName?: string;
   contentClassName?: string;
 }) => {
@@ -61,7 +65,14 @@ export const Tabs = ({
                 className={cn("absolute inset-0 rounded-full bg-gray-200 dark:bg-zinc-800", activeTabClassName)}
               />
             )}
-            <span className="relative block text-black dark:text-white">{tab.title}</span>
+            <span
+              className={cn(
+                "relative block transition-colors",
+                active.value === tab.value ? activeTabTextClassName || "text-white" : inactiveTabTextClassName || "text-black"
+              )}
+            >
+              {tab.title}
+            </span>
           </button>
         ))}
       </div>

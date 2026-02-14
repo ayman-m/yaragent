@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { AgentProvider } from "@/components/agent-context";
 
-const jakarta = Plus_Jakarta_Sans({
+const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-jakarta",
+  variable: "--font-inter",
 });
 
 export const metadata: Metadata = {
@@ -24,7 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full">
-      <body className={`${jakarta.variable} h-full bg-slate-950 font-sans text-slate-100 antialiased`}>
+      <body className={`${inter.variable} h-full bg-slate-950 font-sans text-slate-100 antialiased`}>
         <AgentProvider>{children}</AgentProvider>
       </body>
     </html>

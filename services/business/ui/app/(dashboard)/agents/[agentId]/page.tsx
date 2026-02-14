@@ -192,8 +192,10 @@ export default function AgentDetailPage() {
             <Tabs
               tabs={tabs}
               containerClassName="gap-2 pb-2"
-              tabClassName="border border-slate-300 bg-white text-slate-700"
-              activeTabClassName="bg-slate-900"
+              tabClassName="border border-slate-300 bg-white"
+              activeTabClassName="bg-[#14213d] border-[#14213d]"
+              activeTabTextClassName="text-white"
+              inactiveTabTextClassName="text-black"
               contentClassName="h-[26rem] md:h-[34rem]"
             />
           </div>
