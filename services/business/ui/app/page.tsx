@@ -45,6 +45,15 @@ export default function HomePage() {
     return "login";
   }, [initialized]);
 
+  const friendlyError = useMemo(() => {
+    if (!error) return null;
+    const msg = error.toLowerCase();
+    if (mode === "login" && (msg.includes("http 401") || msg.includes("invalid username or password"))) {
+      return "Sign in failed. Check your username and password and try again.";
+    }
+    return error;
+  }, [error, mode]);
+
   const handleSetup = async (e: FormEvent) => {
     e.preventDefault();
     try {
@@ -109,7 +118,7 @@ export default function HomePage() {
           defaultRuleNamespace={defaultRuleNamespace}
           setDefaultRuleNamespace={setDefaultRuleNamespace}
           submitLabel={loading ? "Creating..." : "Create Admin"}
-          error={error}
+          error={friendlyError}
           includeSetupToken={setupTokenRequired}
           includeSettings
         />
@@ -136,7 +145,7 @@ export default function HomePage() {
             defaultRuleNamespace={defaultRuleNamespace}
             setDefaultRuleNamespace={setDefaultRuleNamespace}
             submitLabel={loading ? "Signing In..." : "Sign In"}
-            error={error}
+            error={friendlyError}
           />
         </div>
 
