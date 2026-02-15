@@ -14,7 +14,7 @@ import {
   TopVulnerablePackagesChart,
 } from "@/components/charts/overview-core-charts";
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
-import { WobbleCard } from "@/components/ui/wobble-card";
+import { GlareCard } from "@/components/ui/glare-card";
 import { useEffect, useMemo, useState } from "react";
 
 export default function OverviewPage() {
@@ -205,51 +205,51 @@ export default function OverviewPage() {
         )}
 
         <section className="mt-6 grid gap-4 lg:grid-cols-3">
-          <WobbleCard containerClassName="lg:col-span-2 min-h-[360px]">
+          <GlareCard containerClassName="lg:col-span-2 min-h-[360px]">
             <h2 className="text-lg font-semibold text-slate-900">Agent Status Breakdown</h2>
             <p className="mt-1 text-sm text-slate-600">Connected, stale, and disconnected fleet split</p>
             <div className="mt-4">
               <AgentsStatusDoughnut connected={connectedCount} stale={staleCount} disconnected={disconnectedCount} />
             </div>
-          </WobbleCard>
+          </GlareCard>
 
-          <WobbleCard containerClassName="min-h-[360px]">
+          <GlareCard containerClassName="min-h-[360px]">
             <h2 className="text-lg font-semibold text-slate-900">Runtime Split</h2>
             <p className="mt-1 text-sm text-slate-600">Container vs host deployment footprint</p>
             <div className="mt-4">
               <RuntimeSplitChart containerCount={containerCount} hostCount={hostCount} />
             </div>
-          </WobbleCard>
+          </GlareCard>
         </section>
 
         <section className="mt-4 grid gap-4 lg:grid-cols-2">
-          <WobbleCard containerClassName="min-h-[380px]">
+          <GlareCard containerClassName="min-h-[380px]">
             <h2 className="text-lg font-semibold text-slate-900">OS Distribution</h2>
             <p className="mt-1 text-sm text-slate-600">Top operating systems across active agents</p>
             <div className="mt-3">
               <OsDistributionChart labels={osDistribution.labels} values={osDistribution.values} />
             </div>
-          </WobbleCard>
+          </GlareCard>
 
-          <WobbleCard containerClassName="min-h-[380px]">
+          <GlareCard containerClassName="min-h-[380px]">
             <h2 className="text-lg font-semibold text-slate-900">Heartbeat Recency</h2>
             <p className="mt-1 text-sm text-slate-600">Agent freshness by last heartbeat age</p>
             <div className="mt-3">
               <HeartbeatRecencyChart labels={heartbeatRecency.labels} values={heartbeatRecency.values} />
             </div>
-          </WobbleCard>
+          </GlareCard>
         </section>
 
         <section className="mt-4 grid gap-4 lg:grid-cols-2">
-          <WobbleCard containerClassName="min-h-[360px]">
+          <GlareCard containerClassName="min-h-[360px]">
             <h2 className="text-lg font-semibold text-slate-900">Risk Score Distribution</h2>
             <p className="mt-1 text-sm text-slate-600">Fleet posture grouped by risk bands</p>
             <div className="mt-3">
               <RiskDistributionChart labels={riskDistribution.labels} values={riskDistribution.values} />
             </div>
-          </WobbleCard>
+          </GlareCard>
 
-          <WobbleCard containerClassName="min-h-[360px]">
+          <GlareCard containerClassName="min-h-[360px]">
             <h2 className="text-lg font-semibold text-slate-900">Compliance Posture</h2>
             <p className="mt-1 text-sm text-slate-600">Compliant vs needs review overview</p>
             <div className="mt-3">
@@ -259,11 +259,11 @@ export default function OverviewPage() {
                 unknown={compliance.unknown}
               />
             </div>
-          </WobbleCard>
+          </GlareCard>
         </section>
 
         <section className="mt-4 grid gap-4 lg:grid-cols-2">
-          <WobbleCard containerClassName="min-h-[360px]">
+          <GlareCard containerClassName="min-h-[360px]">
             <h2 className="text-lg font-semibold text-slate-900">Findings Severity Mix</h2>
             <p className="mt-1 text-sm text-slate-600">Critical, high, medium, and low CVE volume</p>
             <div className="mt-3">
@@ -274,19 +274,19 @@ export default function OverviewPage() {
                 low={detectionMetrics.low}
               />
             </div>
-          </WobbleCard>
+          </GlareCard>
 
-          <WobbleCard containerClassName="min-h-[360px]">
+          <GlareCard containerClassName="min-h-[360px]">
             <h2 className="text-lg font-semibold text-slate-900">Open vs Resolved Detections</h2>
             <p className="mt-1 text-sm text-slate-600">Current detection lifecycle split</p>
             <div className="mt-3">
               <OpenResolvedDetectionsChart open={detectionMetrics.open} resolved={detectionMetrics.resolved} />
             </div>
-          </WobbleCard>
+          </GlareCard>
         </section>
 
         <section className="mt-4 grid gap-4 lg:grid-cols-2">
-          <WobbleCard containerClassName="min-h-[400px]">
+          <GlareCard containerClassName="min-h-[400px]">
             <h2 className="text-lg font-semibold text-slate-900">Vulnerable Packages Top 10</h2>
             <p className="mt-1 text-sm text-slate-600">Packages with highest CVE count</p>
             <div className="mt-3">
@@ -295,15 +295,15 @@ export default function OverviewPage() {
                 values={detectionMetrics.topPackageValues}
               />
             </div>
-          </WobbleCard>
+          </GlareCard>
 
-          <WobbleCard containerClassName="min-h-[400px]">
+          <GlareCard containerClassName="min-h-[400px]">
             <h2 className="text-lg font-semibold text-slate-900">Package Inventory Size</h2>
             <p className="mt-1 text-sm text-slate-600">Installed package volume per agent</p>
             <div className="mt-3">
               <PackageInventorySizeChart labels={packageInventory.labels} values={packageInventory.values} />
             </div>
-          </WobbleCard>
+          </GlareCard>
         </section>
       </main>
     </>

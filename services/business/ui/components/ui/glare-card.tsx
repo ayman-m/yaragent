@@ -65,7 +65,7 @@ export const GlareCard = ({
       ref={refElement}
       style={containerStyle}
       className={cn(
-        "relative isolate w-full [aspect-ratio:5/1.6] [contain:layout_style] [perspective:600px]",
+        "relative isolate h-full w-full [contain:layout_style] [perspective:600px]",
         containerClassName
       )}
       onPointerMove={(event) => {
@@ -100,9 +100,9 @@ export const GlareCard = ({
         }
       }}
     >
-      <div className="grid h-full origin-center [transform:rotateY(var(--r-x))_rotateX(var(--r-y))] overflow-hidden rounded-[var(--radius)] border border-slate-700/80 transition-transform duration-[var(--duration)] ease-[var(--easing)]">
+      <div className="grid h-full origin-center [transform:rotateY(var(--r-x))_rotateX(var(--r-y))] overflow-hidden rounded-[var(--radius)] border border-[color:var(--neutral-300)] transition-transform duration-[var(--duration)] ease-[var(--easing)] hover:[--duration:220ms] hover:[--easing:linear] hover:[--opacity:0.22]">
         <div className="grid h-full w-full mix-blend-soft-light [grid-area:1/1]">
-          <div className={cn("h-full w-full bg-slate-950", className)}>{children}</div>
+          <div className={cn("h-full w-full bg-white", className)}>{children}</div>
         </div>
         <div className="grid h-full w-full opacity-[var(--opacity)] mix-blend-soft-light transition-opacity duration-[var(--duration)] ease-[var(--easing)] [background:radial-gradient(farthest-corner_circle_at_var(--m-x)_var(--m-y),rgba(255,255,255,0.8)_10%,rgba(255,255,255,0.65)_20%,rgba(255,255,255,0)_90%)] [grid-area:1/1]" />
         <div
