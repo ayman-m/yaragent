@@ -321,9 +321,9 @@ function MetricCard({
 }) {
   const toneClass =
     tone === "green"
-      ? "border-[color:var(--gradient-success-start)]/40 bg-[color:var(--gradient-light-start)] text-[color:var(--gradient-success-end)]"
+      ? "border-[color:var(--gradient-success-start)]/40 bg-white text-[color:var(--gradient-success-end)]"
       : tone === "amber"
-      ? "border-[color:var(--gradient-warning-start)]/40 bg-[color:var(--gradient-light-start)] text-[color:var(--gradient-warning-end)]"
+      ? "border-[color:var(--gradient-warning-start)]/40 bg-white text-[color:var(--gradient-warning-end)]"
       : tone === "zinc"
       ? "border-[color:var(--neutral-300)] bg-white text-[color:var(--neutral-700)]"
       : "border-[color:var(--gradient-info-start)]/30 bg-white text-[color:var(--color-dark)]";
