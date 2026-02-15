@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { cn } from "@/lib/utils";
+import { ColourfulText } from "@/components/ui/colourful-text";
 
 export const LayoutTextFlip = ({
   text = "",
@@ -10,14 +11,20 @@ export const LayoutTextFlip = ({
   duration = 2200,
   textClassName,
   wordClassName,
+  colourfulWords = [],
 }: {
   text?: string;
   words: string[];
   duration?: number;
   textClassName?: string;
   wordClassName?: string;
+  colourfulWords?: string[];
 }) => {
   const safeWords = useMemo(() => words.filter(Boolean), [words]);
+  const colourfulSet = useMemo(
+    () => new Set(colourfulWords.map((w) => w.trim().toLowerCase()).filter(Boolean)),
+    [colourfulWords]
+  );
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
@@ -29,6 +36,8 @@ export const LayoutTextFlip = ({
   }, [duration, safeWords]);
 
   if (safeWords.length === 0) return null;
+  const currentWord = safeWords[currentIndex];
+  const isColourful = colourfulSet.has(currentWord.trim().toLowerCase());
 
   return (
     <>
@@ -54,11 +63,10 @@ export const LayoutTextFlip = ({
             transition={{ duration: 0.35 }}
             className="inline-block whitespace-nowrap"
           >
-            {safeWords[currentIndex]}
+            {isColourful ? <ColourfulText text={currentWord} /> : currentWord}
           </motion.span>
         </AnimatePresence>
       </motion.span>
     </>
   );
 };
-
