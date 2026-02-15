@@ -51,7 +51,7 @@ export function AgentsStatusDoughnut({
       legend: {
         position: "bottom",
         labels: {
-          color: "#cbd5e1",
+          color: "#334155",
           boxWidth: 10,
           usePointStyle: true,
           pointStyle: "circle",
