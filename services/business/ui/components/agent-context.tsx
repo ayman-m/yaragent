@@ -30,6 +30,23 @@ export interface AgentProfile {
   findingsCount: number;
 }
 
+export interface YaraRuleFile {
+  name: string;
+  tenantId: string;
+  objectKey: string;
+  etag: string;
+  sha256: string;
+  sizeBytes: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: string | null;
+  updatedBy: string | null;
+}
+
+export interface YaraRuleContent extends YaraRuleFile {
+  content: string;
+}
+
 interface SetupSettings {
   org_name: string;
   environment: string;
@@ -47,6 +64,11 @@ interface AgentContextType {
   refreshAgents: () => Promise<void>;
   pushRule: (agentId: string, ruleText: string) => Promise<any>;
   getAgentProfile: (agentId: string) => Promise<AgentProfile>;
+  listYaraRules: () => Promise<YaraRuleFile[]>;
+  getYaraRule: (name: string) => Promise<YaraRuleContent>;
+  createYaraRule: (name: string, content: string) => Promise<YaraRuleContent>;
+  updateYaraRule: (name: string, content: string) => Promise<YaraRuleContent>;
+  deleteYaraRule: (name: string) => Promise<void>;
   checkSetupStatus: () => Promise<SetupStatus>;
   setupAdmin: (username: string, password: string, settings: SetupSettings, setupToken?: string) => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
@@ -105,6 +127,21 @@ function parseMaybeJSON(input: unknown): unknown {
   } catch {
     return input;
   }
+}
+
+function mapYaraRuleFile(input: any): YaraRuleFile {
+  return {
+    name: String(input?.name || ""),
+    tenantId: String(input?.tenant_id || input?.tenantId || "default"),
+    objectKey: String(input?.object_key || input?.objectKey || ""),
+    etag: String(input?.etag || ""),
+    sha256: String(input?.sha256 || ""),
+    sizeBytes: Number(input?.size_bytes || input?.sizeBytes || 0),
+    createdAt: input?.created_at || input?.createdAt || null,
+    updatedAt: input?.updated_at || input?.updatedAt || null,
+    createdBy: input?.created_by || input?.createdBy || null,
+    updatedBy: input?.updated_by || input?.updatedBy || null,
+  };
 }
 
 export function AgentProvider({ children }: { children: React.ReactNode }) {
@@ -292,6 +329,117 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     [token, withAuthHeaders, handleUnauthorized]
   );
 
+  const listYaraRules = useCallback(async (): Promise<YaraRuleFile[]> => {
+    if (!token) {
+      throw new Error("Not authenticated");
+    }
+    const res = await fetch(`${API_BASE}/yara/rules`, {
+      headers: withAuthHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        handleUnauthorized();
+      }
+      const msg = await res.text();
+      throw new Error(`HTTP ${res.status} ${msg}`);
+    }
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+    return data.map(mapYaraRuleFile);
+  }, [token, withAuthHeaders, handleUnauthorized]);
+
+  const getYaraRule = useCallback(
+    async (name: string): Promise<YaraRuleContent> => {
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
+      const res = await fetch(`${API_BASE}/yara/rules/${encodeURIComponent(name)}`, {
+        headers: withAuthHeaders(),
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          handleUnauthorized();
+        }
+        const msg = await res.text();
+        throw new Error(`HTTP ${res.status} ${msg}`);
+      }
+      const data = await res.json();
+      return {
+        ...mapYaraRuleFile(data),
+        content: String(data?.content || ""),
+      };
+    },
+    [token, withAuthHeaders, handleUnauthorized]
+  );
+
+  const createYaraRule = useCallback(
+    async (name: string, content: string): Promise<YaraRuleContent> => {
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
+      const res = await fetch(`${API_BASE}/yara/rules`, {
+        method: "POST",
+        headers: withAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ name, content }),
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          handleUnauthorized();
+        }
+        const msg = await res.text();
+        throw new Error(`HTTP ${res.status} ${msg}`);
+      }
+      const base = await res.json();
+      const full = await getYaraRule(base.name || name);
+      return full;
+    },
+    [token, withAuthHeaders, handleUnauthorized, getYaraRule]
+  );
+
+  const updateYaraRule = useCallback(
+    async (name: string, content: string): Promise<YaraRuleContent> => {
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
+      const res = await fetch(`${API_BASE}/yara/rules/${encodeURIComponent(name)}`, {
+        method: "PUT",
+        headers: withAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ content }),
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          handleUnauthorized();
+        }
+        const msg = await res.text();
+        throw new Error(`HTTP ${res.status} ${msg}`);
+      }
+      const base = await res.json();
+      const full = await getYaraRule(base.name || name);
+      return full;
+    },
+    [token, withAuthHeaders, handleUnauthorized, getYaraRule]
+  );
+
+  const deleteYaraRule = useCallback(
+    async (name: string): Promise<void> => {
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
+      const res = await fetch(`${API_BASE}/yara/rules/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+        headers: withAuthHeaders(),
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          handleUnauthorized();
+        }
+        const msg = await res.text();
+        throw new Error(`HTTP ${res.status} ${msg}`);
+      }
+    },
+    [token, withAuthHeaders, handleUnauthorized]
+  );
+
   return (
     <AgentContext.Provider
       value={{
@@ -300,6 +448,11 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         refreshAgents,
         pushRule,
         getAgentProfile,
+        listYaraRules,
+        getYaraRule,
+        createYaraRule,
+        updateYaraRule,
+        deleteYaraRule,
         checkSetupStatus,
         setupAdmin,
         login,

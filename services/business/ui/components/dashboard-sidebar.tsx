@@ -7,6 +7,7 @@ import {
   IconBellRinging,
   IconBrandGithub,
   IconBook2,
+  IconFileCode,
   IconLayoutDashboard,
   IconLayoutSidebarRightCollapse,
   IconLogout2,
@@ -28,6 +29,7 @@ type SidebarLinkItem = {
 const primaryLinks: SidebarLinkItem[] = [
   { label: "Overview", href: "/overview", icon: IconLayoutDashboard },
   { label: "Agents", href: "/agents", icon: IconSatellite },
+  { label: "Rules", href: "/rules", icon: IconFileCode },
   { label: "Telemetry", href: "/telemetry", icon: IconActivityHeartbeat },
   { label: "Alerts", href: "/alerts", icon: IconBellRinging },
 ];
