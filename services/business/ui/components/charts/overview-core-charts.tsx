@@ -37,7 +37,6 @@ const amberDeeper = "#92400e";
 const roseDark = "#be123c";
 const roseDeeper = "#9f1239";
 const slateDark = "#334155";
-const slateDeeper = "#1e293b";
 
 const depthShadowPlugin: Plugin = {
   id: "depthShadow",
