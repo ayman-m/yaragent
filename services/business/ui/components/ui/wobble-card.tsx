@@ -44,10 +44,11 @@ export const WobbleCard = ({
       className={cn("relative mx-auto w-full overflow-hidden rounded-2xl bg-transparent", containerClassName)}
     >
       <div
-        className="relative h-full overflow-hidden border border-slate-200 bg-white [background-image:radial-gradient(88%_100%_at_top,rgba(59,130,246,0.08),rgba(255,255,255,0))]"
+        className="relative h-full overflow-hidden border bg-white [background-image:radial-gradient(88%_100%_at_top,rgba(73,163,241,0.11),rgba(255,255,255,0))]"
         style={{
+          borderColor: "var(--neutral-300)",
           boxShadow:
-            "0 10px 30px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04), 0 0 0 1px rgba(148,163,184,0.10)",
+            "0 10px 28px rgba(52,71,103,0.10), 0 1px 2px rgba(52,71,103,0.05), 0 0 0 1px rgba(206,212,218,0.20)",
         }}
       >
         {showGradient ? <BackgroundGradientAnimation className="opacity-70" /> : null}

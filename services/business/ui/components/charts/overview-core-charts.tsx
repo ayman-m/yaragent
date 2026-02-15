@@ -26,17 +26,14 @@ ChartJS.register(
   Legend
 );
 
-const axisColor = "#475569";
-const gridColor = "rgba(148,163,184,0.2)";
-const slateBlue = "#1d4ed8";
-const slateBlueDark = "#1e3a8a";
-const emeraldDark = "#047857";
-const emeraldDeeper = "#065f46";
-const amberDark = "#b45309";
-const amberDeeper = "#92400e";
-const roseDark = "#be123c";
-const roseDeeper = "#9f1239";
-const slateDark = "#334155";
+const axisColor = "#495057";
+const gridColor = "rgba(206,212,218,0.35)";
+const colorInfo = "#1A73E8";
+const colorSuccess = "#43A047";
+const colorWarning = "#FB8C00";
+const colorError = "#E53935";
+const colorSecondaryDark = "#495361";
+const colorDark = "#344767";
 
 const depthShadowPlugin: Plugin = {
   id: "depthShadow",
@@ -70,7 +67,7 @@ export function RuntimeSplitChart({ containerCount, hostCount }: { containerCoun
           datasets: [
             {
               data: [containerCount, hostCount],
-              backgroundColor: [slateBlue, slateDark],
+              backgroundColor: [colorInfo, colorDark],
               borderWidth: 0,
             },
           ],
@@ -113,7 +110,7 @@ export function OsDistributionChart({ labels, values }: { labels: string[]; valu
               data: values,
               borderRadius: 8,
               backgroundColor: (ctx) =>
-                getBarGradient(ctx.chart, "rgba(30,58,138,0.55)", "rgba(29,78,216,0.9)"),
+                getBarGradient(ctx.chart, "rgba(73,163,241,0.65)", "rgba(26,115,232,0.95)"),
               borderWidth: 0,
             },
           ],
@@ -182,12 +179,12 @@ export function HeartbeatRecencyChart({
             {
               label: "Agents",
               data: values,
-              borderColor: slateBlue,
-              backgroundColor: "rgba(30,58,138,0.2)",
+              borderColor: colorInfo,
+              backgroundColor: "rgba(73,163,241,0.2)",
               fill: true,
               tension: 0.35,
               pointRadius: 3,
-              pointBackgroundColor: slateBlueDark,
+              pointBackgroundColor: colorInfo,
               borderWidth: 2.4,
             },
           ],
@@ -218,13 +215,13 @@ export function RiskDistributionChart({
               borderRadius: 8,
               backgroundColor: (ctx) => {
                 const colorPairs: [string, string][] = [
-                  ["rgba(6,95,70,0.5)", emeraldDark],
-                  ["rgba(30,58,138,0.5)", slateBlue],
-                  ["rgba(146,64,14,0.5)", amberDark],
-                  ["rgba(154,52,18,0.55)", amberDeeper],
-                  ["rgba(136,19,55,0.55)", roseDark],
+                  ["rgba(102,187,106,0.6)", "#43A047"],
+                  ["rgba(73,163,241,0.6)", "#1A73E8"],
+                  ["rgba(255,167,38,0.6)", "#FB8C00"],
+                  ["rgba(239,83,80,0.6)", "#E53935"],
+                  ["rgba(116,123,138,0.58)", "#495361"],
                 ];
-                const pair = colorPairs[ctx.dataIndex] || ["rgba(30,58,138,0.5)", slateBlue];
+                const pair = colorPairs[ctx.dataIndex] || ["rgba(116,123,138,0.58)", "#495361"];
                 return getBarGradient(ctx.chart, pair[0], pair[1]);
               },
               borderWidth: 0,
@@ -273,7 +270,7 @@ export function ComplianceChart({
           datasets: [
             {
               data: [compliant, review, unknown],
-              backgroundColor: [emeraldDark, amberDark, slateDark],
+              backgroundColor: [colorSuccess, colorWarning, colorSecondaryDark],
               borderWidth: 0,
             },
           ],
@@ -327,12 +324,12 @@ export function FindingsSeverityMixChart({
               borderRadius: 10,
               backgroundColor: (ctx) => {
                 const colorPairs: [string, string][] = [
-                  ["rgba(159,18,57,0.6)", roseDark],
-                  ["rgba(190,24,93,0.55)", roseDeeper],
-                  ["rgba(146,64,14,0.55)", amberDark],
-                  ["rgba(30,58,138,0.5)", slateBlue],
+                  ["rgba(239,83,80,0.65)", colorError],
+                  ["rgba(251,140,0,0.65)", "#FB8C00"],
+                  ["rgba(73,163,241,0.6)", colorInfo],
+                  ["rgba(116,123,138,0.6)", colorSecondaryDark],
                 ];
-                const pair = colorPairs[ctx.dataIndex] || ["rgba(30,58,138,0.5)", slateBlue];
+                const pair = colorPairs[ctx.dataIndex] || ["rgba(116,123,138,0.6)", colorSecondaryDark];
                 return getBarGradient(ctx.chart, pair[0], pair[1]);
               },
               borderWidth: 0,
@@ -370,7 +367,7 @@ export function OpenResolvedDetectionsChart({ open, resolved }: { open: number; 
           datasets: [
             {
               data: [open, resolved],
-              backgroundColor: [slateBlueDark, emeraldDeeper],
+              backgroundColor: [colorInfo, colorSuccess],
               borderWidth: 0,
               hoverOffset: 10,
             },
@@ -410,7 +407,7 @@ export function TopVulnerablePackagesChart({ labels, values }: { labels: string[
               label: "CVEs",
               data: values,
               borderRadius: 8,
-              backgroundColor: (ctx) => getBarGradient(ctx.chart, "rgba(15,23,42,0.55)", "rgba(30,58,138,0.9)"),
+              backgroundColor: (ctx) => getBarGradient(ctx.chart, "rgba(116,123,138,0.65)", "rgba(73,83,97,0.95)"),
               borderWidth: 0,
             },
           ],
@@ -449,7 +446,7 @@ export function PackageInventorySizeChart({ labels, values }: { labels: string[]
               label: "Packages",
               data: values,
               borderRadius: 8,
-              backgroundColor: (ctx) => getBarGradient(ctx.chart, "rgba(6,95,70,0.45)", "rgba(4,120,87,0.9)"),
+              backgroundColor: (ctx) => getBarGradient(ctx.chart, "rgba(102,187,106,0.65)", "rgba(67,160,71,0.95)"),
               borderWidth: 0,
             },
           ],

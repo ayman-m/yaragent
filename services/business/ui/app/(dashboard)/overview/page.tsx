@@ -321,16 +321,16 @@ function MetricCard({
 }) {
   const toneClass =
     tone === "green"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      ? "border-[color:var(--gradient-success-start)]/40 bg-[color:var(--gradient-light-start)] text-[color:var(--gradient-success-end)]"
       : tone === "amber"
-      ? "border-amber-200 bg-amber-50 text-amber-700"
+      ? "border-[color:var(--gradient-warning-start)]/40 bg-[color:var(--gradient-light-start)] text-[color:var(--gradient-warning-end)]"
       : tone === "zinc"
-      ? "border-slate-200 bg-white text-slate-700"
-      : "border-slate-200 bg-white text-slate-800";
+      ? "border-[color:var(--neutral-300)] bg-white text-[color:var(--neutral-700)]"
+      : "border-[color:var(--gradient-info-start)]/30 bg-white text-[color:var(--color-dark)]";
 
   return (
     <div className={`rounded-xl border px-4 py-4 shadow-sm ${toneClass}`}>
-      <p className="text-xs uppercase tracking-widest text-slate-500">{label}</p>
+      <p className="text-xs uppercase tracking-widest text-[color:var(--neutral-600)]">{label}</p>
       <p className="mt-3 text-3xl font-bold">{value}</p>
     </div>
   );

@@ -44,7 +44,7 @@ export function AgentsStatusDoughnut({
     datasets: [
       {
         data: values,
-        backgroundColor: ["#065f46", "#b45309", "#334155"],
+        backgroundColor: ["#43A047", "#FB8C00", "#495361"],
         borderWidth: 0,
         hoverOffset: 10,
       },
@@ -74,7 +74,7 @@ export function AgentsStatusDoughnut({
       legend: {
         position: "bottom",
         labels: {
-          color: "#334155",
+          color: "#495057",
           boxWidth: 10,
           usePointStyle: true,
           pointStyle: "circle",
