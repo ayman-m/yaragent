@@ -52,7 +52,7 @@ export function DashboardPageHeader({
               words={mergedWords}
               duration={flipDuration}
               colourfulWords={[titleWord]}
-              wordClassName="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[#14213d] shadow-sm"
+              wordClassName="min-w-0 rounded-none border-0 bg-transparent px-0 py-0 text-[color:var(--color-dark)] shadow-none"
             />
           )}
         </div>
