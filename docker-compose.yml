@@ -207,7 +207,7 @@ services:
     command: ["--url", "wss://orchestrator:8002/agent/ws"]
     environment:
       - ENROLL_TOKEN=poc-test-token
-      - TELEMETRY_ENABLED=${AGENT_TELEMETRY_ENABLED:-false}
+      - TELEMETRY_ENABLED=true
       - TELEMETRY_PUSH_URL=${AGENT_TELEMETRY_PUSH_URL:-http://alloy:9999/loki/api/v1/push}
       - TENANT_ID=${AGENT_TENANT_ID:-default}
       - DEPLOY_ENV=${AGENT_DEPLOY_ENV:-dev}

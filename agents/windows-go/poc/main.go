@@ -267,6 +267,123 @@ func readTotalMemoryBytes() int64 {
 	return 0
 }
 
+func readCPUTicks() (total uint64, idle uint64, ok bool) {
+	b, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		return 0, 0, false
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "cpu ") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			return 0, 0, false
+		}
+		var vals []uint64
+		for _, f := range fields[1:] {
+			v, err := strconv.ParseUint(f, 10, 64)
+			if err != nil {
+				return 0, 0, false
+			}
+			vals = append(vals, v)
+		}
+		var sum uint64
+		for _, v := range vals {
+			sum += v
+		}
+		idleTicks := vals[3]
+		if len(vals) > 4 {
+			idleTicks += vals[4] // iowait
+		}
+		return sum, idleTicks, true
+	}
+	return 0, 0, false
+}
+
+func readMemoryUsage() (totalMB int64, usedMB int64, usedPct float64, ok bool) {
+	b, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0, 0, 0, false
+	}
+	var totalKB int64
+	var availKB int64
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "MemTotal:") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				totalKB, _ = strconv.ParseInt(fields[1], 10, 64)
+			}
+		}
+		if strings.HasPrefix(line, "MemAvailable:") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				availKB, _ = strconv.ParseInt(fields[1], 10, 64)
+			}
+		}
+	}
+	if totalKB <= 0 {
+		return 0, 0, 0, false
+	}
+	if availKB < 0 {
+		availKB = 0
+	}
+	usedKB := totalKB - availKB
+	if usedKB < 0 {
+		usedKB = 0
+	}
+	totalMB = totalKB / 1024
+	usedMB = usedKB / 1024
+	usedPct = (float64(usedKB) / float64(totalKB)) * 100
+	return totalMB, usedMB, usedPct, true
+}
+
+func shouldSkipDisk(name string) bool {
+	skipPrefixes := []string{
+		"loop", "ram", "fd", "sr", "dm-", "md",
+	}
+	for _, p := range skipPrefixes {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func readDiskIOBytes() (readBytes uint64, writeBytes uint64, ok bool) {
+	b, err := os.ReadFile("/proc/diskstats")
+	if err != nil {
+		return 0, 0, false
+	}
+	var totalReadSectors uint64
+	var totalWriteSectors uint64
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 14 {
+			continue
+		}
+		name := fields[2]
+		if shouldSkipDisk(name) {
+			continue
+		}
+		readSectors, err1 := strconv.ParseUint(fields[5], 10, 64)
+		writeSectors, err2 := strconv.ParseUint(fields[9], 10, 64)
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		totalReadSectors += readSectors
+		totalWriteSectors += writeSectors
+	}
+	// Linux sector size is typically 512 bytes for this counter.
+	return totalReadSectors * 512, totalWriteSectors * 512, true
+}
+
 func readOSRelease() map[string]string {
 	out := map[string]string{}
 	b, err := os.ReadFile("/etc/os-release")
@@ -758,6 +875,60 @@ func main() {
 		envOrDefault("TENANT_ID", "default"),
 		envOrDefault("DEPLOY_ENV", "dev"),
 	)
+	if telemetry.enabled {
+		go func() {
+			ticker := time.NewTicker(60 * time.Second)
+			defer ticker.Stop()
+
+			prevTotal, prevIdle, hasPrevCPU := readCPUTicks()
+			prevReadBytes, prevWriteBytes, hasPrevDisk := readDiskIOBytes()
+
+			for range ticker.C {
+				fields := map[string]string{
+					"runtime_kind": map[bool]string{true: "container", false: "host"}[containerized],
+					"instance_id":  instanceID,
+				}
+
+				currTotal, currIdle, okCPU := readCPUTicks()
+				if okCPU {
+					if hasPrevCPU && currTotal > prevTotal {
+						totalDiff := currTotal - prevTotal
+						idleDiff := currIdle - prevIdle
+						usage := (1.0 - (float64(idleDiff) / float64(totalDiff))) * 100
+						if usage < 0 {
+							usage = 0
+						}
+						if usage > 100 {
+							usage = 100
+						}
+						fields["cpu_usage_pct"] = fmt.Sprintf("%.2f", usage)
+					}
+					prevTotal, prevIdle = currTotal, currIdle
+					hasPrevCPU = true
+				}
+
+				if totalMB, usedMB, usedPct, okMem := readMemoryUsage(); okMem {
+					fields["memory_total_mb"] = fmt.Sprintf("%d", totalMB)
+					fields["memory_used_mb"] = fmt.Sprintf("%d", usedMB)
+					fields["memory_used_pct"] = fmt.Sprintf("%.2f", usedPct)
+				}
+
+				currReadBytes, currWriteBytes, okDisk := readDiskIOBytes()
+				if okDisk {
+					fields["disk_read_bytes_total"] = fmt.Sprintf("%d", currReadBytes)
+					fields["disk_write_bytes_total"] = fmt.Sprintf("%d", currWriteBytes)
+					if hasPrevDisk && currReadBytes >= prevReadBytes && currWriteBytes >= prevWriteBytes {
+						fields["disk_read_bytes_per_min"] = fmt.Sprintf("%d", currReadBytes-prevReadBytes)
+						fields["disk_write_bytes_per_min"] = fmt.Sprintf("%d", currWriteBytes-prevWriteBytes)
+					}
+					prevReadBytes, prevWriteBytes = currReadBytes, currWriteBytes
+					hasPrevDisk = true
+				}
+
+				telemetry.Emit("agent.runtime.metrics", "info", "runtime metrics sampled", fields)
+			}
+		}()
+	}
 
 	// ensure rules dir
 	baseDir := filepath.Join(os.TempDir(), "yaragent_rules")
