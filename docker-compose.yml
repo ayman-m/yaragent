@@ -123,6 +123,12 @@ services:
       - ORCHESTRATOR_API_TOKEN=${ORCHESTRATOR_API_TOKEN:-}
       - ORCH_CERT_PRIV=${ORCH_CERT_PRIV}
       - ORCH_CERT_PUB=${ORCH_CERT_PUB}
+      - YARA_STORAGE_ENABLED=${YARA_STORAGE_ENABLED:-true}
+      - YARA_STORAGE_ENDPOINT=${YARA_STORAGE_ENDPOINT:-minio:9000}
+      - YARA_STORAGE_ACCESS_KEY=${YARA_STORAGE_ACCESS_KEY:-${MINIO_ROOT_USER:-yaragent}}
+      - YARA_STORAGE_SECRET_KEY=${YARA_STORAGE_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-yaragent-minio-secret}}
+      - YARA_STORAGE_BUCKET=${YARA_STORAGE_BUCKET:-yaragent-rules}
+      - YARA_STORAGE_USE_SSL=${YARA_STORAGE_USE_SSL:-false}
     depends_on:
       init:
         condition: service_completed_successfully

@@ -1,9 +1,11 @@
 import asyncio
 import base64
 import hashlib
+import io
 import json
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -13,6 +15,8 @@ from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconn
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from minio import Minio
+from minio.error import S3Error
 from passlib.context import CryptContext
 
 app = FastAPI()
@@ -49,6 +53,12 @@ AGENT_CLEANUP_INTERVAL_SECONDS = int(os.getenv("AGENT_CLEANUP_INTERVAL_SECONDS",
 AGENT_AUTO_DELETE_EPHEMERAL = (os.getenv("AGENT_AUTO_DELETE_EPHEMERAL", "true").strip().lower() in {"1", "true", "yes", "on"})
 AGENT_ORPHAN_DELETE_SECONDS = int(os.getenv("AGENT_ORPHAN_DELETE_SECONDS", "21600"))
 AGENT_STALE_RETENTION_DAYS = int(os.getenv("AGENT_STALE_RETENTION_DAYS", "30"))
+YARA_STORAGE_ENABLED = (os.getenv("YARA_STORAGE_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
+YARA_STORAGE_ENDPOINT = os.getenv("YARA_STORAGE_ENDPOINT", "minio:9000")
+YARA_STORAGE_ACCESS_KEY = os.getenv("YARA_STORAGE_ACCESS_KEY", "yaragent")
+YARA_STORAGE_SECRET_KEY = os.getenv("YARA_STORAGE_SECRET_KEY", "yaragent-minio-secret")
+YARA_STORAGE_BUCKET = os.getenv("YARA_STORAGE_BUCKET", "yaragent-rules")
+YARA_STORAGE_USE_SSL = (os.getenv("YARA_STORAGE_USE_SSL", "false").strip().lower() in {"1", "true", "yes", "on"})
 
 _db_pool: Optional[asyncpg.Pool] = None
 _cleanup_task: Optional[asyncio.Task] = None
@@ -456,6 +466,119 @@ def _tenant_for_request(user: dict, payload_tenant: Optional[str]) -> str:
     return "default"
 
 
+def _ensure_yara_storage_enabled() -> None:
+    if not YARA_STORAGE_ENABLED:
+        raise HTTPException(status_code=503, detail="YARA object storage is disabled")
+
+
+def _validate_yara_rule_name(name: str) -> str:
+    n = (name or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9._-]+\.yar", n):
+        raise HTTPException(status_code=400, detail="invalid rule name; expected <name>.yar")
+    return n
+
+
+def _rule_object_key(tenant_id: str, name: str) -> str:
+    return f"tenants/{tenant_id}/yara/{name}"
+
+
+def _minio_client() -> Minio:
+    return Minio(
+        YARA_STORAGE_ENDPOINT,
+        access_key=YARA_STORAGE_ACCESS_KEY,
+        secret_key=YARA_STORAGE_SECRET_KEY,
+        secure=YARA_STORAGE_USE_SSL,
+    )
+
+
+def _safe_string(value: Any, fallback: str = "") -> str:
+    if value is None:
+        return fallback
+    return str(value)
+
+
+async def _upsert_rule_metadata(
+    *,
+    tenant_id: str,
+    name: str,
+    object_key: str,
+    etag: str,
+    sha256_hex: str,
+    size_bytes: int,
+    actor: str,
+) -> None:
+    db = await _db()
+    async with db.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO yara_rule_files (
+                id, tenant_id, name, object_key, etag, sha256, size_bytes, created_by, updated_by, updated_at
+            )
+            VALUES (
+                $8, $1, $2, $3, $4, $5, $6, $7, $7, now()
+            )
+            ON CONFLICT (tenant_id, name) DO UPDATE SET
+                object_key = EXCLUDED.object_key,
+                etag = EXCLUDED.etag,
+                sha256 = EXCLUDED.sha256,
+                size_bytes = EXCLUDED.size_bytes,
+                updated_by = EXCLUDED.updated_by,
+                updated_at = now(),
+                deleted_at = NULL
+            """,
+            tenant_id,
+            name,
+            object_key,
+            etag,
+            sha256_hex,
+            max(0, int(size_bytes)),
+            actor,
+            str(uuid.uuid4()),
+        )
+
+
+async def _get_rule_metadata(tenant_id: str, name: str) -> Optional[asyncpg.Record]:
+    db = await _db()
+    async with db.acquire() as conn:
+        return await conn.fetchrow(
+            """
+            SELECT tenant_id, name, object_key, etag, sha256, size_bytes, created_at, updated_at, created_by, updated_by
+            FROM yara_rule_files
+            WHERE tenant_id = $1 AND name = $2 AND deleted_at IS NULL
+            """,
+            tenant_id,
+            name,
+        )
+
+
+async def _list_rule_metadata(tenant_id: str) -> Dict[str, asyncpg.Record]:
+    db = await _db()
+    async with db.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT tenant_id, name, object_key, etag, sha256, size_bytes, created_at, updated_at, created_by, updated_by
+            FROM yara_rule_files
+            WHERE tenant_id = $1 AND deleted_at IS NULL
+            ORDER BY updated_at DESC
+            """,
+            tenant_id,
+        )
+    return {str(r["name"]): r for r in rows}
+
+
+async def _delete_rule_metadata(tenant_id: str, name: str) -> None:
+    db = await _db()
+    async with db.acquire() as conn:
+        await conn.execute(
+            """
+            DELETE FROM yara_rule_files
+            WHERE tenant_id = $1 AND name = $2
+            """,
+            tenant_id,
+            name,
+        )
+
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     token = credentials.credentials
 
@@ -737,6 +860,241 @@ async def get_agent_profile(agent_id: str, _: dict = Depends(get_current_user)) 
             "findings_count": int(row.get("findings_count") or 0),
         }
     )
+
+
+@app.get("/yara/rules")
+async def list_yara_rules(user: dict = Depends(get_current_user)) -> JSONResponse:
+    _ensure_yara_storage_enabled()
+    tenant_id = _tenant_for_request(user, None)
+    client = _minio_client()
+    prefix = f"tenants/{tenant_id}/yara/"
+    actor = str(user.get("sub") or "system")
+    metadata_by_name = await _list_rule_metadata(tenant_id)
+
+    def _list_objects() -> list:
+        return list(client.list_objects(YARA_STORAGE_BUCKET, prefix=prefix, recursive=True))
+
+    try:
+        objects = await asyncio.to_thread(_list_objects)
+    except Exception as exc:
+        logger.exception("failed to list yara rules")
+        raise HTTPException(status_code=502, detail=f"yara storage list failed: {exc}")
+
+    items = []
+    for obj in objects:
+        object_name = _safe_string(getattr(obj, "object_name", ""))
+        if not object_name or not object_name.endswith(".yar"):
+            continue
+        name = object_name.split("/")[-1]
+        row = metadata_by_name.get(name)
+        etag = _safe_string(getattr(obj, "etag", ""))
+        size_bytes = int(getattr(obj, "size", 0) or 0)
+        updated_at_obj = getattr(obj, "last_modified", None)
+        items.append(
+            {
+                "name": name,
+                "tenant_id": tenant_id,
+                "object_key": object_name,
+                "etag": etag,
+                "sha256": _safe_string(row["sha256"]) if row else "",
+                "size_bytes": size_bytes,
+                "created_at": row["created_at"].isoformat() if row and row.get("created_at") else None,
+                "updated_at": row["updated_at"].isoformat() if row and row.get("updated_at") else (updated_at_obj.isoformat() if updated_at_obj else None),
+                "created_by": _safe_string(row["created_by"]) if row else actor,
+                "updated_by": _safe_string(row["updated_by"]) if row else actor,
+            }
+        )
+
+    items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+    return JSONResponse(items)
+
+
+@app.get("/yara/rules/{name}")
+async def get_yara_rule(name: str, user: dict = Depends(get_current_user)) -> JSONResponse:
+    _ensure_yara_storage_enabled()
+    tenant_id = _tenant_for_request(user, None)
+    safe_name = _validate_yara_rule_name(name)
+    object_key = _rule_object_key(tenant_id, safe_name)
+    client = _minio_client()
+    row = await _get_rule_metadata(tenant_id, safe_name)
+
+    try:
+        response = await asyncio.to_thread(client.get_object, YARA_STORAGE_BUCKET, object_key)
+        data = response.read()
+        response.close()
+        response.release_conn()
+        stat = await asyncio.to_thread(client.stat_object, YARA_STORAGE_BUCKET, object_key)
+    except S3Error as exc:
+        if exc.code in {"NoSuchKey", "NoSuchObject", "NoSuchBucket"}:
+            raise HTTPException(status_code=404, detail="rule not found")
+        logger.exception("failed to fetch yara rule")
+        raise HTTPException(status_code=502, detail=f"yara storage read failed: {exc}")
+    except Exception as exc:
+        logger.exception("failed to fetch yara rule")
+        raise HTTPException(status_code=502, detail=f"yara storage read failed: {exc}")
+
+    try:
+        content = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="rule content is not valid UTF-8")
+
+    return JSONResponse(
+        {
+            "name": safe_name,
+            "tenant_id": tenant_id,
+            "object_key": object_key,
+            "etag": _safe_string(getattr(stat, "etag", "")),
+            "sha256": _safe_string(row["sha256"]) if row else hashlib.sha256(data).hexdigest(),
+            "size_bytes": int(getattr(stat, "size", 0) or len(data)),
+            "created_at": row["created_at"].isoformat() if row and row.get("created_at") else None,
+            "updated_at": row["updated_at"].isoformat() if row and row.get("updated_at") else None,
+            "created_by": _safe_string(row["created_by"]) if row else None,
+            "updated_by": _safe_string(row["updated_by"]) if row else None,
+            "content": content,
+        }
+    )
+
+
+@app.post("/yara/rules")
+async def create_yara_rule(payload: dict, user: dict = Depends(get_current_user)) -> JSONResponse:
+    _ensure_yara_storage_enabled()
+    tenant_id = _tenant_for_request(user, payload.get("tenant_id"))
+    actor = str(user.get("sub") or "system")
+    safe_name = _validate_yara_rule_name(str(payload.get("name") or ""))
+    content = str(payload.get("content") or "")
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="rule content must not be empty")
+    encoded = content.encode("utf-8")
+    if len(encoded) > 1024 * 1024:
+        raise HTTPException(status_code=400, detail="rule content exceeds 1MB limit")
+
+    object_key = _rule_object_key(tenant_id, safe_name)
+    client = _minio_client()
+
+    try:
+        await asyncio.to_thread(client.stat_object, YARA_STORAGE_BUCKET, object_key)
+        raise HTTPException(status_code=409, detail="rule already exists")
+    except S3Error as exc:
+        if exc.code not in {"NoSuchKey", "NoSuchObject", "NoSuchBucket"}:
+            logger.exception("failed to check existing rule")
+            raise HTTPException(status_code=502, detail=f"yara storage stat failed: {exc}")
+    except HTTPException:
+        raise
+
+    try:
+        await asyncio.to_thread(
+            client.put_object,
+            YARA_STORAGE_BUCKET,
+            object_key,
+            io.BytesIO(encoded),
+            len(encoded),
+            "text/plain; charset=utf-8",
+        )
+        stat = await asyncio.to_thread(client.stat_object, YARA_STORAGE_BUCKET, object_key)
+    except Exception as exc:
+        logger.exception("failed to create yara rule")
+        raise HTTPException(status_code=502, detail=f"yara storage write failed: {exc}")
+
+    sha256_hex = hashlib.sha256(encoded).hexdigest()
+    await _upsert_rule_metadata(
+        tenant_id=tenant_id,
+        name=safe_name,
+        object_key=object_key,
+        etag=_safe_string(getattr(stat, "etag", "")),
+        sha256_hex=sha256_hex,
+        size_bytes=int(getattr(stat, "size", len(encoded)) or len(encoded)),
+        actor=actor,
+    )
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "name": safe_name,
+            "tenant_id": tenant_id,
+            "object_key": object_key,
+            "etag": _safe_string(getattr(stat, "etag", "")),
+            "sha256": sha256_hex,
+            "size_bytes": int(getattr(stat, "size", len(encoded)) or len(encoded)),
+        },
+        status_code=201,
+    )
+
+
+@app.put("/yara/rules/{name}")
+async def update_yara_rule(name: str, payload: dict, user: dict = Depends(get_current_user)) -> JSONResponse:
+    _ensure_yara_storage_enabled()
+    tenant_id = _tenant_for_request(user, payload.get("tenant_id"))
+    actor = str(user.get("sub") or "system")
+    safe_name = _validate_yara_rule_name(name)
+    content = str(payload.get("content") or "")
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="rule content must not be empty")
+    encoded = content.encode("utf-8")
+    if len(encoded) > 1024 * 1024:
+        raise HTTPException(status_code=400, detail="rule content exceeds 1MB limit")
+
+    object_key = _rule_object_key(tenant_id, safe_name)
+    client = _minio_client()
+    try:
+        await asyncio.to_thread(client.stat_object, YARA_STORAGE_BUCKET, object_key)
+    except S3Error as exc:
+        if exc.code in {"NoSuchKey", "NoSuchObject", "NoSuchBucket"}:
+            raise HTTPException(status_code=404, detail="rule not found")
+        logger.exception("failed to check rule before update")
+        raise HTTPException(status_code=502, detail=f"yara storage stat failed: {exc}")
+
+    try:
+        await asyncio.to_thread(
+            client.put_object,
+            YARA_STORAGE_BUCKET,
+            object_key,
+            io.BytesIO(encoded),
+            len(encoded),
+            "text/plain; charset=utf-8",
+        )
+        stat = await asyncio.to_thread(client.stat_object, YARA_STORAGE_BUCKET, object_key)
+    except Exception as exc:
+        logger.exception("failed to update yara rule")
+        raise HTTPException(status_code=502, detail=f"yara storage write failed: {exc}")
+
+    sha256_hex = hashlib.sha256(encoded).hexdigest()
+    await _upsert_rule_metadata(
+        tenant_id=tenant_id,
+        name=safe_name,
+        object_key=object_key,
+        etag=_safe_string(getattr(stat, "etag", "")),
+        sha256_hex=sha256_hex,
+        size_bytes=int(getattr(stat, "size", len(encoded)) or len(encoded)),
+        actor=actor,
+    )
+    return JSONResponse(
+        {
+            "ok": True,
+            "name": safe_name,
+            "tenant_id": tenant_id,
+            "object_key": object_key,
+            "etag": _safe_string(getattr(stat, "etag", "")),
+            "sha256": sha256_hex,
+            "size_bytes": int(getattr(stat, "size", len(encoded)) or len(encoded)),
+        }
+    )
+
+
+@app.delete("/yara/rules/{name}")
+async def delete_yara_rule(name: str, user: dict = Depends(get_current_user)) -> JSONResponse:
+    _ensure_yara_storage_enabled()
+    tenant_id = _tenant_for_request(user, None)
+    safe_name = _validate_yara_rule_name(name)
+    object_key = _rule_object_key(tenant_id, safe_name)
+    client = _minio_client()
+    try:
+        await asyncio.to_thread(client.remove_object, YARA_STORAGE_BUCKET, object_key)
+    except Exception as exc:
+        logger.exception("failed to delete yara rule")
+        raise HTTPException(status_code=502, detail=f"yara storage delete failed: {exc}")
+
+    await _delete_rule_metadata(tenant_id, safe_name)
+    return JSONResponse({"ok": True, "name": safe_name, "tenant_id": tenant_id})
 
 
 @app.websocket("/agent/ws")

@@ -8,6 +8,11 @@ Endpoints:
 - `GET /settings` (JWT/API-token protected)
 - `PUT /settings` (JWT/API-token protected)
 - `GET /agents` (JWT/API-token protected)
+- `GET /yara/rules` (JWT/API-token protected)
+- `GET /yara/rules/{name}` (JWT/API-token protected)
+- `POST /yara/rules` (JWT/API-token protected)
+- `PUT /yara/rules/{name}` (JWT/API-token protected)
+- `DELETE /yara/rules/{name}` (JWT/API-token protected)
 - `POST /push_rule` (JWT/API-token protected)
 - `WS /agent/ws` (agent channel)
 
@@ -23,3 +28,9 @@ Optional env vars:
 - `INITIAL_SETUP_TOKEN`
 - `ORCHESTRATOR_API_TOKEN`
 - `ACCESS_TOKEN_EXPIRE_MINUTES`
+- `YARA_STORAGE_ENABLED`
+- `YARA_STORAGE_ENDPOINT`
+- `YARA_STORAGE_ACCESS_KEY`
+- `YARA_STORAGE_SECRET_KEY`
+- `YARA_STORAGE_BUCKET`
+- `YARA_STORAGE_USE_SSL`

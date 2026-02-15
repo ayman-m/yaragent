@@ -274,6 +274,36 @@ def init_postgres_schema() -> None:
                 ON agents_stale_state (archived_at DESC)
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS yara_rule_files (
+                    id UUID PRIMARY KEY,
+                    tenant_id TEXT NOT NULL DEFAULT 'default',
+                    name TEXT NOT NULL,
+                    object_key TEXT NOT NULL,
+                    etag TEXT,
+                    sha256 TEXT,
+                    size_bytes BIGINT NOT NULL DEFAULT 0,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    created_by TEXT,
+                    updated_by TEXT,
+                    deleted_at TIMESTAMPTZ
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_yara_rule_files_tenant_name_unique
+                ON yara_rule_files (tenant_id, name)
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_yara_rule_files_tenant_updated
+                ON yara_rule_files (tenant_id, updated_at DESC)
+                """
+            )
 
 
 def _minio_client() -> Minio:
