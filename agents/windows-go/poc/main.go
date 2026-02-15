@@ -14,9 +14,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	osuser "os/user"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -284,6 +286,70 @@ func readOSRelease() map[string]string {
 	return out
 }
 
+func detectKernelVersion() string {
+	if out, err := exec.Command("uname", "-r").Output(); err == nil {
+		if v := strings.TrimSpace(string(out)); v != "" {
+			return v
+		}
+	}
+	if b, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
+		if v := strings.TrimSpace(string(b)); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func detectOSVersion(osRelease map[string]string) string {
+	candidates := []string{
+		strings.TrimSpace(osRelease["VERSION"]),
+		strings.TrimSpace(osRelease["VERSION_ID"]),
+		strings.TrimSpace(osRelease["PRETTY_NAME"]),
+	}
+	for _, v := range candidates {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func domainFromHost(host string) string {
+	h := strings.TrimSpace(host)
+	if h == "" || !strings.Contains(h, ".") {
+		return ""
+	}
+	parts := strings.SplitN(h, ".", 2)
+	if len(parts) == 2 {
+		return strings.TrimSpace(parts[1])
+	}
+	return ""
+}
+
+func domainFromResolvConf() string {
+	b, err := os.ReadFile("/etc/resolv.conf")
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		if fields[0] == "search" || fields[0] == "domain" {
+			v := strings.TrimSpace(fields[1])
+			if v != "" && v != "." {
+				return v
+			}
+		}
+	}
+	return ""
+}
+
 func readDNSServers() []string {
 	out := []string{}
 	b, err := os.ReadFile("/etc/resolv.conf")
@@ -404,7 +470,20 @@ func collectAssetProfile(agentID, instanceID string, containerized bool, cveSnap
 			domain = strings.TrimSpace(parts[1])
 		}
 	}
+	if domain == "unknown" {
+		if d := domainFromHost(host); d != "" {
+			domain = d
+		} else if d := domainFromResolvConf(); d != "" {
+			domain = d
+		}
+	}
 	osRelease := readOSRelease()
+	osName := strings.TrimSpace(osRelease["NAME"])
+	if osName == "" {
+		osName = strings.TrimSpace(osRelease["PRETTY_NAME"])
+	}
+	osVersion := detectOSVersion(osRelease)
+	kernel := detectKernelVersion()
 	primaryIP := firstNonLoopbackIPv4()
 	primaryMAC := firstMACAddress()
 	memBytes := readTotalMemoryBytes()
@@ -439,18 +518,18 @@ func collectAssetProfile(agentID, instanceID string, containerized bool, cveSnap
 		}
 	}
 	return map[string]any{
-		"asset_id":     envOrDefault("ASSET_ID", agentID),
-		"asset_name":   envOrDefault("ASSET_NAME", host),
-		"provider":     envOrDefault("CLOUD_PROVIDER", "unknown"),
-		"cloud_region": envOrDefault("CLOUD_REGION", "unknown"),
-		"account_id":   envOrDefault("CLOUD_ACCOUNT_ID", "unknown"),
+		"asset_id":       envOrDefault("ASSET_ID", agentID),
+		"asset_name":     envOrDefault("ASSET_NAME", host),
+		"provider":       envOrDefault("CLOUD_PROVIDER", "unknown"),
+		"cloud_region":   envOrDefault("CLOUD_REGION", "unknown"),
+		"account_id":     envOrDefault("CLOUD_ACCOUNT_ID", "unknown"),
 		"asset_category": envOrDefault("ASSET_CATEGORY", "host"),
 		"instance_id":    instanceID,
 		"runtime_kind":   map[bool]string{true: "container", false: "host"}[containerized],
 		"os": map[string]any{
-			"name":         envOrDefault("OS_NAME", strings.TrimSpace(osRelease["NAME"])),
-			"version":      envOrDefault("OS_VERSION", strings.TrimSpace(osRelease["VERSION"])),
-			"kernel":       envOrDefault("OS_KERNEL", strings.TrimSpace(osRelease["KERNEL"])),
+			"name":         envOrDefault("OS_NAME", osName),
+			"version":      envOrDefault("OS_VERSION", osVersion),
+			"kernel":       envOrDefault("OS_KERNEL", kernel),
 			"architecture": runtime.GOARCH,
 			"go_version":   runtime.Version(),
 		},
@@ -483,37 +562,129 @@ func collectAssetProfile(agentID, instanceID string, containerized bool, cveSnap
 }
 
 func collectSBOMSnapshot() []map[string]any {
-	base := []map[string]any{
-		{
-			"name":    "yaragent-agent-poc",
-			"version": envOrDefault("AGENT_VERSION", "dev"),
-			"type":    "application",
-		},
-	}
-	raw := strings.TrimSpace(os.Getenv("SBOM_PACKAGES"))
-	if raw == "" {
-		return base
-	}
-	parts := strings.Split(raw, ",")
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
+	packages := []map[string]any{}
+	seen := map[string]struct{}{}
+
+	addPackage := func(name, version, kind string) {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return
 		}
-		name := p
-		version := "unknown"
-		if strings.Contains(p, ":") {
-			kv := strings.SplitN(p, ":", 2)
-			name = strings.TrimSpace(kv[0])
-			version = strings.TrimSpace(kv[1])
+		version = strings.TrimSpace(version)
+		if version == "" {
+			version = "unknown"
 		}
-		base = append(base, map[string]any{
+		kind = strings.TrimSpace(kind)
+		if kind == "" {
+			kind = "package"
+		}
+		key := strings.ToLower(name) + "|" + strings.ToLower(version) + "|" + strings.ToLower(kind)
+		if _, exists := seen[key]; exists {
+			return
+		}
+		seen[key] = struct{}{}
+		packages = append(packages, map[string]any{
 			"name":    name,
 			"version": version,
-			"type":    "package",
+			"type":    kind,
 		})
 	}
-	return base
+
+	addPackage("yaragent-agent-poc", envOrDefault("AGENT_VERSION", "dev"), "application")
+
+	// Alpine packages.
+	if b, err := os.ReadFile("/lib/apk/db/installed"); err == nil {
+		name := ""
+		version := ""
+		for _, line := range strings.Split(string(b), "\n") {
+			line = strings.TrimSpace(line)
+			switch {
+			case strings.HasPrefix(line, "P:"):
+				name = strings.TrimSpace(strings.TrimPrefix(line, "P:"))
+			case strings.HasPrefix(line, "V:"):
+				version = strings.TrimSpace(strings.TrimPrefix(line, "V:"))
+			case line == "":
+				if name != "" {
+					addPackage(name, version, "apk")
+				}
+				name = ""
+				version = ""
+			}
+		}
+		if name != "" {
+			addPackage(name, version, "apk")
+		}
+	}
+
+	// Debian/Ubuntu packages.
+	if b, err := os.ReadFile("/var/lib/dpkg/status"); err == nil {
+		name := ""
+		version := ""
+		for _, line := range strings.Split(string(b), "\n") {
+			line = strings.TrimSpace(line)
+			switch {
+			case strings.HasPrefix(line, "Package:"):
+				name = strings.TrimSpace(strings.TrimPrefix(line, "Package:"))
+			case strings.HasPrefix(line, "Version:"):
+				version = strings.TrimSpace(strings.TrimPrefix(line, "Version:"))
+			case line == "":
+				if name != "" {
+					addPackage(name, version, "dpkg")
+				}
+				name = ""
+				version = ""
+			}
+		}
+		if name != "" {
+			addPackage(name, version, "dpkg")
+		}
+	}
+
+	// RPM packages.
+	if _, err := exec.LookPath("rpm"); err == nil {
+		if out, err := exec.Command("rpm", "-qa", "--qf", "%{NAME}\t%{VERSION}-%{RELEASE}\n").Output(); err == nil {
+			for _, line := range strings.Split(string(out), "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				parts := strings.SplitN(line, "\t", 2)
+				if len(parts) == 2 {
+					addPackage(parts[0], parts[1], "rpm")
+				}
+			}
+		}
+	}
+
+	// Operator-provided extras.
+	raw := strings.TrimSpace(os.Getenv("SBOM_PACKAGES"))
+	if raw != "" {
+		parts := strings.Split(raw, ",")
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			name := p
+			version := "unknown"
+			if strings.Contains(p, ":") {
+				kv := strings.SplitN(p, ":", 2)
+				name = strings.TrimSpace(kv[0])
+				version = strings.TrimSpace(kv[1])
+			}
+			addPackage(name, version, "package")
+		}
+	}
+
+	sort.SliceStable(packages, func(i, j int) bool {
+		ni := strings.ToLower(fmt.Sprint(packages[i]["name"]))
+		nj := strings.ToLower(fmt.Sprint(packages[j]["name"]))
+		if ni == nj {
+			return strings.ToLower(fmt.Sprint(packages[i]["version"])) < strings.ToLower(fmt.Sprint(packages[j]["version"]))
+		}
+		return ni < nj
+	})
+	return packages
 }
 
 func collectCVESnapshot() []map[string]any {
@@ -639,14 +810,14 @@ func main() {
 					findingsCount := len(cveSnapshot)
 					assetProfile := collectAssetProfile(agentID, instanceID, containerized, cveSnapshot)
 					hb := map[string]any{
-						"type":        "agent.heartbeat",
-						"agent_id":    agentID,
-						"tenant_id":   envOrDefault("TENANT_ID", "default"),
-						"ephemeral":   containerized,
-						"instance_id": instanceID,
-						"asset_profile": assetProfile,
-						"sbom":          sbomSnapshot,
-						"cves":          cveSnapshot,
+						"type":           "agent.heartbeat",
+						"agent_id":       agentID,
+						"tenant_id":      envOrDefault("TENANT_ID", "default"),
+						"ephemeral":      containerized,
+						"instance_id":    instanceID,
+						"asset_profile":  assetProfile,
+						"sbom":           sbomSnapshot,
+						"cves":           cveSnapshot,
 						"findings_count": findingsCount,
 						"capabilities": map[string]any{
 							"yara_compile":  true,

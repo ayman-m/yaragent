@@ -64,9 +64,9 @@ export default function AgentDetailPage() {
               <Info label="Agent ID" value={asDisplay(profile?.agentId)} mono />
               <Info label="Hostname" value={asDisplay(asset.asset_name)} />
               <Info label="Tenant" value={asDisplay(profile?.tenantId)} />
-              <Info label="Provider" value={asDisplay(asset.provider)} />
-              <Info label="Cloud Region" value={asDisplay(asset.cloud_region)} />
-              <Info label="Account ID" value={asDisplay(asset.account_id)} />
+              {isKnown(asset.provider) ? <Info label="Provider" value={asDisplay(asset.provider)} /> : null}
+              {isKnown(asset.cloud_region) ? <Info label="Cloud Region" value={asDisplay(asset.cloud_region)} /> : null}
+              {isKnown(asset.account_id) ? <Info label="Account ID" value={asDisplay(asset.account_id)} /> : null}
               <Info label="Asset Category" value={asDisplay(asset.asset_category)} />
               <Info label="Runtime" value={asDisplay(asset.runtime_kind)} />
               <Info label="OS Name" value={asDisplay(os.name)} />
@@ -267,6 +267,11 @@ function asDisplay(value: unknown): string {
   if (value === null || value === undefined) return "Unknown";
   const str = String(value).trim();
   return str.length > 0 ? str : "Unknown";
+}
+
+function isKnown(value: unknown): boolean {
+  const rendered = asDisplay(value).toLowerCase();
+  return rendered !== "unknown" && rendered !== "n/a" && rendered !== "-";
 }
 
 function asMaybeString(value: unknown): string | null {

@@ -825,7 +825,7 @@ async def agent_ws(ws: WebSocket):
                         state["asset_profile"] = profile_payload
                     sbom_payload = msg.get("sbom")
                     if isinstance(sbom_payload, list):
-                        state["sbom"] = sbom_payload[:500]
+                        state["sbom"] = sbom_payload
                     cve_payload = msg.get("cves")
                     if isinstance(cve_payload, list):
                         state["cves"] = cve_payload[:1000]
