@@ -6,6 +6,9 @@ import time
 from pathlib import Path
 
 import psycopg
+from minio import Minio
+from minio.error import S3Error
+from minio.versioningconfig import ENABLED, VersioningConfig
 
 TEMPLATES_DIR = Path("/app/bootstrap/nginx/templates")
 OUTPUT_DIR = Path(os.getenv("INIT_NGINX_OUTPUT_DIR", "/tmp/nginx-generated"))
@@ -43,6 +46,14 @@ POSTGRES_PORT = int(os.getenv("INIT_POSTGRES_PORT", "5432"))
 POSTGRES_USER = os.getenv("INIT_POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("INIT_POSTGRES_PASSWORD", "postgres")
 POSTGRES_DB = os.getenv("INIT_POSTGRES_DB", "yaragent")
+
+MINIO_ENABLED = os.getenv("INIT_MINIO_ENABLED", "true").lower() == "true"
+MINIO_ENDPOINT = os.getenv("INIT_MINIO_ENDPOINT", "minio:9000")
+MINIO_ACCESS_KEY = os.getenv("INIT_MINIO_ACCESS_KEY", "yaragent")
+MINIO_SECRET_KEY = os.getenv("INIT_MINIO_SECRET_KEY", "yaragent-minio-secret")
+MINIO_USE_SSL = os.getenv("INIT_MINIO_USE_SSL", "false").lower() == "true"
+MINIO_BUCKET = os.getenv("INIT_MINIO_BUCKET", "yaragent-rules")
+MINIO_SEED_DIR = Path(os.getenv("INIT_MINIO_SEED_DIR", "/app/bootstrap/minio/seed"))
 
 
 def _pg_connect():
@@ -265,6 +276,57 @@ def init_postgres_schema() -> None:
             )
 
 
+def _minio_client() -> Minio:
+    return Minio(
+        MINIO_ENDPOINT,
+        access_key=MINIO_ACCESS_KEY,
+        secret_key=MINIO_SECRET_KEY,
+        secure=MINIO_USE_SSL,
+    )
+
+
+def _wait_for_minio(max_attempts: int = 60, sleep_seconds: float = 2.0) -> Minio:
+    last_error: Exception | None = None
+    for _ in range(max_attempts):
+        try:
+            client = _minio_client()
+            # Any successful call means MinIO is reachable and credentials are valid.
+            _ = client.bucket_exists(MINIO_BUCKET)
+            return client
+        except Exception as exc:
+            last_error = exc
+            time.sleep(sleep_seconds)
+    raise RuntimeError(f"MinIO is not reachable for initializer: {last_error}")
+
+
+def init_minio_bucket() -> None:
+    client = _wait_for_minio()
+    if not client.bucket_exists(MINIO_BUCKET):
+        client.make_bucket(MINIO_BUCKET)
+        print(f"[init] minio bucket created: {MINIO_BUCKET}")
+    else:
+        print(f"[init] minio bucket already exists: {MINIO_BUCKET}")
+
+    # Enable object versioning for safe rule rollbacks.
+    client.set_bucket_versioning(MINIO_BUCKET, VersioningConfig(ENABLED))
+    print(f"[init] minio versioning enabled: {MINIO_BUCKET}")
+
+    if not MINIO_SEED_DIR.exists():
+        print(f"[init] minio seed dir not found, skipping seed: {MINIO_SEED_DIR}")
+        return
+
+    for seed_file in sorted(MINIO_SEED_DIR.glob("*.yar")):
+        object_key = f"tenants/default/yara/{seed_file.name}"
+        try:
+            client.stat_object(MINIO_BUCKET, object_key)
+            continue
+        except S3Error as exc:
+            if exc.code != "NoSuchKey":
+                raise
+        client.fput_object(MINIO_BUCKET, object_key, str(seed_file), content_type="text/plain; charset=utf-8")
+        print(f"[init] minio seeded rule: {object_key}")
+
+
 def main() -> None:
     _wait_for_postgres()
     init_postgres_schema()
@@ -285,7 +347,10 @@ def main() -> None:
         render_keycloak_assets()
         print(f"[init] keycloak assets rendered to {KEYCLOAK_OUTPUT_DIR}")
 
-    if not RENDER_ENABLED and not OBS_RENDER_ENABLED and not KEYCLOAK_RENDER_ENABLED:
+    if MINIO_ENABLED:
+        init_minio_bucket()
+
+    if not RENDER_ENABLED and not OBS_RENDER_ENABLED and not KEYCLOAK_RENDER_ENABLED and not MINIO_ENABLED:
         print("[init] render disabled; nothing else to do")
 
 

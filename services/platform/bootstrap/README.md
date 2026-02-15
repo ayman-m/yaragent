@@ -7,6 +7,7 @@ Current responsibilities:
 - Initialize Postgres schema (`users` table)
 - Render Nginx templates into `/tmp/nginx-generated/nginx`
 - Materialize Nginx TLS files from env vars
+- Initialize MinIO bucket for YARA rule storage (bucket + versioning + optional seed)
 
 Required env vars:
 - `INIT_POSTGRES_DSN`
@@ -19,3 +20,12 @@ Template env vars:
 - `INIT_NGINX_API_UPSTREAM`
 - `INIT_NGINX_MCP_UPSTREAM`
 - `INIT_NGINX_API_TIMEOUT_SECONDS`
+
+MinIO init env vars:
+- `INIT_MINIO_ENABLED`
+- `INIT_MINIO_ENDPOINT`
+- `INIT_MINIO_ACCESS_KEY`
+- `INIT_MINIO_SECRET_KEY`
+- `INIT_MINIO_USE_SSL`
+- `INIT_MINIO_BUCKET`
+- `INIT_MINIO_SEED_DIR`

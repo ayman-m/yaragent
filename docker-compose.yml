@@ -1,6 +1,30 @@
 # Docker Compose orchestration for YARA Agent services
 # TLS is enforced end-to-end: nginx -> ui/orchestrator over HTTPS
 services:
+  minio:
+    build:
+      context: .
+      dockerfile: services/infra/minio/Dockerfile
+    container_name: yaragent-minio
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-yaragent}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-yaragent-minio-secret}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - miniodata:/data
+    networks:
+      - yaragent-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
   postgres:
     build:
       context: .
@@ -57,12 +81,21 @@ services:
       - INIT_KEYCLOAK_REDIRECT_URI=${INIT_KEYCLOAK_REDIRECT_URI:-${PUBLIC_BASE_URL:-https://localhost}/oauth2/callback}
       - INIT_KEYCLOAK_DEMO_USER=${INIT_KEYCLOAK_DEMO_USER:-yaradmin}
       - INIT_KEYCLOAK_DEMO_PASSWORD=${INIT_KEYCLOAK_DEMO_PASSWORD:-yaradmin123!}
+      - INIT_MINIO_ENABLED=${INIT_MINIO_ENABLED:-true}
+      - INIT_MINIO_ENDPOINT=${INIT_MINIO_ENDPOINT:-minio:9000}
+      - INIT_MINIO_ACCESS_KEY=${INIT_MINIO_ACCESS_KEY:-${MINIO_ROOT_USER:-yaragent}}
+      - INIT_MINIO_SECRET_KEY=${INIT_MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-yaragent-minio-secret}}
+      - INIT_MINIO_USE_SSL=${INIT_MINIO_USE_SSL:-false}
+      - INIT_MINIO_BUCKET=${INIT_MINIO_BUCKET:-yaragent-rules}
+      - INIT_MINIO_SEED_DIR=${INIT_MINIO_SEED_DIR:-/app/bootstrap/minio/seed}
     volumes:
       - nginxconf:/tmp/nginx-generated
       - observabilityconf:/tmp/observability-generated
       - keycloakconf:/tmp/keycloak-generated
     depends_on:
       postgres:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     networks:
       - yaragent-net
@@ -358,6 +391,7 @@ networks:
 
 volumes:
   pgdata:
+  miniodata:
   nginxconf:
   observabilityconf:
   keycloakconf:
