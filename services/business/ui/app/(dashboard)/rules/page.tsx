@@ -2,12 +2,16 @@
 
 import { useAgents, YaraRuleFile } from "@/components/agent-context";
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
-import dynamic from "next/dynamic";
+import { CodeBlock } from "@/components/ui/code-block";
+import { FloatingDock } from "@/components/ui/floating-dock";
+import { MovingBorder } from "@/components/ui/moving-border";
+import {
+  IconDeviceFloppy,
+  IconFilePlus,
+  IconRefresh,
+  IconTrash,
+} from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-
-const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
-  ssr: false,
-});
 
 const DEFAULT_TEMPLATE = `rule example_rule {
   meta:
@@ -175,33 +179,6 @@ export default function RulesPage() {
         subtitle="Create, edit, and manage YARA files in MinIO object storage"
         flipSubtitle
         flipWords={["Rules", "Policies", "Editor", "Storage", "Versioning"]}
-        action={
-          <div className="flex items-center gap-2">
-            <button
-              onClick={loadRules}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Refresh
-            </button>
-            <button onClick={handleNew} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-              New Rule
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving || loadingRule}
-              className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {saving ? "Saving..." : "Save"}
-            </button>
-            <button
-              onClick={handleDelete}
-              disabled={!selectedName || deleting}
-              className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {deleting ? "Deleting..." : "Delete"}
-            </button>
-          </div>
-        }
       />
 
       <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 md:p-8">
@@ -282,22 +259,53 @@ export default function RulesPage() {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1">
-              <MonacoEditor
-                height="100%"
-                defaultLanguage="cpp"
-                language="cpp"
-                value={editorValue}
-                onChange={(value) => setEditorValue(value || "")}
-                theme="vs"
-                options={{
-                  fontSize: 13,
-                  minimap: { enabled: false },
-                  wordWrap: "on",
-                  scrollBeyondLastLine: false,
-                  lineNumbersMinChars: 3,
-                  automaticLayout: true,
-                }}
+            <div className="min-h-0 flex-1 p-3">
+              <div className="relative overflow-hidden rounded-xl p-[1px]">
+                <div className="absolute inset-0">
+                  <MovingBorder duration={3500} rx="20%" ry="20%">
+                    <div className="h-14 w-14 bg-[radial-gradient(#1A73E8_40%,transparent_60%)] opacity-80" />
+                  </MovingBorder>
+                </div>
+                <div className="relative rounded-xl border border-slate-200 bg-slate-900/95">
+                  <CodeBlock
+                    language="yaml"
+                    filename={draftName || "rule.yar"}
+                    code={editorValue}
+                    editable
+                    onChange={setEditorValue}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-200 px-3 py-3">
+              <FloatingDock
+                desktopClassName="bg-slate-100 dark:bg-slate-100"
+                mobileClassName=""
+                items={[
+                  {
+                    title: "Refresh",
+                    icon: <IconRefresh className="h-full w-full text-slate-600" />,
+                    onClick: loadRules,
+                  },
+                  {
+                    title: "New Rule",
+                    icon: <IconFilePlus className="h-full w-full text-slate-600" />,
+                    onClick: handleNew,
+                  },
+                  {
+                    title: saving ? "Saving..." : "Save",
+                    icon: <IconDeviceFloppy className="h-full w-full text-slate-600" />,
+                    onClick: handleSave,
+                    disabled: saving || loadingRule,
+                  },
+                  {
+                    title: deleting ? "Deleting..." : "Delete",
+                    icon: <IconTrash className="h-full w-full text-rose-600" />,
+                    onClick: handleDelete,
+                    disabled: !selectedName || deleting,
+                  },
+                ]}
               />
             </div>
 
@@ -329,4 +337,3 @@ function humanSize(value: number) {
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
-
