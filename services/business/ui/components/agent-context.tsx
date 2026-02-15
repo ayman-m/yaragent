@@ -47,6 +47,17 @@ export interface YaraRuleContent extends YaraRuleFile {
   content: string;
 }
 
+export interface YaraValidationError {
+  line: number | null;
+  message: string;
+}
+
+export interface YaraValidationResult {
+  valid: boolean;
+  message: string;
+  errors: YaraValidationError[];
+}
+
 interface SetupSettings {
   org_name: string;
   environment: string;
@@ -69,6 +80,7 @@ interface AgentContextType {
   createYaraRule: (name: string, content: string) => Promise<YaraRuleContent>;
   updateYaraRule: (name: string, content: string) => Promise<YaraRuleContent>;
   deleteYaraRule: (name: string) => Promise<void>;
+  validateYaraRule: (name: string, content: string) => Promise<YaraValidationResult>;
   checkSetupStatus: () => Promise<SetupStatus>;
   setupAdmin: (username: string, password: string, settings: SetupSettings, setupToken?: string) => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
@@ -440,6 +452,38 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     [token, withAuthHeaders, handleUnauthorized]
   );
 
+  const validateYaraRule = useCallback(
+    async (name: string, content: string): Promise<YaraValidationResult> => {
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
+      const res = await fetch(`${API_BASE}/yara/validate`, {
+        method: "POST",
+        headers: withAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ name, content }),
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          handleUnauthorized();
+        }
+        const msg = await res.text();
+        throw new Error(`HTTP ${res.status} ${msg}`);
+      }
+      const data = await res.json();
+      return {
+        valid: Boolean(data?.valid),
+        message: String(data?.message || ""),
+        errors: Array.isArray(data?.errors)
+          ? data.errors.map((e: any) => ({
+              line: typeof e?.line === "number" ? e.line : null,
+              message: String(e?.message || "Validation error"),
+            }))
+          : [],
+      };
+    },
+    [token, withAuthHeaders, handleUnauthorized]
+  );
+
   return (
     <AgentContext.Provider
       value={{
@@ -453,6 +497,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         createYaraRule,
         updateYaraRule,
         deleteYaraRule,
+        validateYaraRule,
         checkSetupStatus,
         setupAdmin,
         login,

@@ -6,6 +6,9 @@ import json
 import logging
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -495,6 +498,61 @@ def _safe_string(value: Any, fallback: str = "") -> str:
     if value is None:
         return fallback
     return str(value)
+
+
+def _parse_yarac_errors(stderr_text: str) -> list[dict]:
+    errors: list[dict] = []
+    for raw_line in (stderr_text or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        line_no: Optional[int] = None
+        m = re.search(r"line\s+(\d+)", line, flags=re.IGNORECASE)
+        if m:
+            line_no = int(m.group(1))
+        else:
+            m2 = re.search(r":(\d+):", line)
+            if m2:
+                line_no = int(m2.group(1))
+        errors.append(
+            {
+                "line": line_no,
+                "message": line,
+            }
+        )
+    return errors
+
+
+def _validate_yara_with_yarac(name: str, content: str) -> dict:
+    if shutil.which("yarac") is None:
+        raise RuntimeError("yarac binary is not available in orchestrator container")
+
+    with tempfile.TemporaryDirectory(prefix="yaraval-") as tmpdir:
+        rule_path = os.path.join(tmpdir, name or "rule.yar")
+        out_path = os.path.join(tmpdir, "compiled.yarc")
+        with open(rule_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        proc = subprocess.run(
+            ["yarac", rule_path, out_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+        if proc.returncode == 0:
+            return {
+                "valid": True,
+                "message": "YARA rule compiled successfully",
+                "errors": [],
+            }
+        return {
+            "valid": False,
+            "message": "YARA rule failed to compile",
+            "errors": _parse_yarac_errors(combined),
+            "raw": combined,
+        }
 
 
 async def _upsert_rule_metadata(
@@ -1095,6 +1153,31 @@ async def delete_yara_rule(name: str, user: dict = Depends(get_current_user)) ->
 
     await _delete_rule_metadata(tenant_id, safe_name)
     return JSONResponse({"ok": True, "name": safe_name, "tenant_id": tenant_id})
+
+
+@app.post("/yara/validate")
+async def validate_yara_rule(payload: dict, user: dict = Depends(get_current_user)) -> JSONResponse:
+    _ensure_yara_storage_enabled()
+    _ = _tenant_for_request(user, payload.get("tenant_id"))
+    name = _validate_yara_rule_name(str(payload.get("name") or "rule.yar"))
+    content = str(payload.get("content") or "")
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="rule content must not be empty")
+    encoded = content.encode("utf-8")
+    if len(encoded) > 1024 * 1024:
+        raise HTTPException(status_code=400, detail="rule content exceeds 1MB limit")
+
+    try:
+        result = await asyncio.to_thread(_validate_yara_with_yarac, name, content)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="validation timed out")
+    except Exception as exc:
+        logger.exception("yara validation failed")
+        raise HTTPException(status_code=502, detail=f"validation failed: {exc}")
+
+    return JSONResponse(result)
 
 
 @app.websocket("/agent/ws")

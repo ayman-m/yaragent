@@ -13,6 +13,7 @@ Endpoints:
 - `POST /yara/rules` (JWT/API-token protected)
 - `PUT /yara/rules/{name}` (JWT/API-token protected)
 - `DELETE /yara/rules/{name}` (JWT/API-token protected)
+- `POST /yara/validate` (JWT/API-token protected)
 - `POST /push_rule` (JWT/API-token protected)
 - `WS /agent/ws` (agent channel)
 

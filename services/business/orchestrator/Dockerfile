@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 WORKDIR /app
-RUN apt-get update && apt-get install -y curl openssl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl openssl yara && rm -rf /var/lib/apt/lists/*
 COPY services/business/orchestrator/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY services/business/orchestrator/src/ ./src

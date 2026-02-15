@@ -8,10 +8,13 @@ import { MovingBorder } from "@/components/ui/moving-border";
 import {
   IconDeviceFloppy,
   IconFilePlus,
+  IconCircleCheck,
+  IconShieldCheck,
   IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CodeBlockMarker } from "@/components/ui/code-block";
 
 const DEFAULT_TEMPLATE = `rule example_rule {
   meta:
@@ -27,7 +30,7 @@ const DEFAULT_TEMPLATE = `rule example_rule {
 type SortField = "name" | "updatedAt" | "size";
 
 export default function RulesPage() {
-  const { listYaraRules, getYaraRule, createYaraRule, updateYaraRule, deleteYaraRule } = useAgents();
+  const { listYaraRules, getYaraRule, createYaraRule, updateYaraRule, deleteYaraRule, validateYaraRule } = useAgents();
   const [rules, setRules] = useState<YaraRuleFile[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("new_rule.yar");
@@ -40,6 +43,9 @@ export default function RulesPage() {
   const [loadingRule, setLoadingRule] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const [validationMarkers, setValidationMarkers] = useState<CodeBlockMarker[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -121,6 +127,8 @@ export default function RulesPage() {
       setEditorValue(response.content);
       setSavedValue(response.content);
       setNotice(selectedName ? "Rule updated successfully" : "Rule created successfully");
+      setValidationMessage("YARA rule compiled successfully");
+      setValidationMarkers([]);
       await loadRules();
     } catch (err: any) {
       setError(err.message || "Failed to save rule");
@@ -128,6 +136,46 @@ export default function RulesPage() {
       setSaving(false);
     }
   };
+
+  const runValidation = useCallback(
+    async (showSuccessMessage: boolean) => {
+      const name = draftName.trim() || "rule.yar";
+      if (!editorValue.trim()) {
+        setValidationMessage("Rule content is empty");
+        setValidationMarkers([]);
+        return;
+      }
+      setValidating(true);
+      try {
+        const result = await validateYaraRule(name, editorValue);
+        if (result.valid) {
+          setValidationMarkers([]);
+          if (showSuccessMessage) {
+            setValidationMessage(result.message || "YARA rule compiled successfully");
+          } else {
+            setValidationMessage(null);
+          }
+        } else {
+          setValidationMarkers(
+            result.errors
+              .filter((e) => typeof e.line === "number")
+              .map((e) => ({
+                line: Math.max(1, Number(e.line)),
+                message: e.message,
+                severity: "error",
+              }))
+          );
+          setValidationMessage(result.errors[0]?.message || result.message || "Validation failed");
+        }
+      } catch (err: any) {
+        setValidationMessage(err.message || "Validation request failed");
+        setValidationMarkers([]);
+      } finally {
+        setValidating(false);
+      }
+    },
+    [draftName, editorValue, validateYaraRule]
+  );
 
   const handleDelete = async () => {
     if (!selectedName) return;
@@ -149,6 +197,18 @@ export default function RulesPage() {
       setDeleting(false);
     }
   };
+
+  useEffect(() => {
+    if (!editorValue.trim()) {
+      setValidationMarkers([]);
+      setValidationMessage(null);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      runValidation(false);
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [editorValue, draftName, runValidation]);
 
   const filteredRules = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -268,19 +328,40 @@ export default function RulesPage() {
                 </div>
                 <div className="relative rounded-xl border border-slate-200 bg-slate-900/95">
                   <CodeBlock
-                    language="yaml"
+                    language="yara"
                     filename={draftName || "rule.yar"}
                     code={editorValue}
                     editable
                     onChange={setEditorValue}
+                    markers={validationMarkers}
                   />
                 </div>
               </div>
             </div>
 
-            <div className="border-t border-slate-200 px-3 py-3">
+            <div className="border-t border-slate-200 px-3 py-2 text-sm">
+              <div className="mb-3 flex items-center gap-2 text-slate-600">
+                {validating ? (
+                  <>
+                    <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-500" />
+                    Validating...
+                  </>
+                ) : validationMarkers.length > 0 ? (
+                  <>
+                    <span className="inline-block h-2 w-2 rounded-full bg-rose-500" />
+                    {validationMessage || "Validation error"}
+                  </>
+                ) : validationMessage ? (
+                  <>
+                    <IconCircleCheck className="h-4 w-4 text-emerald-600" />
+                    <span className="text-emerald-700">{validationMessage}</span>
+                  </>
+                ) : (
+                  <span className="text-slate-500">Editor ready</span>
+                )}
+              </div>
               <FloatingDock
-                desktopClassName="bg-slate-100 dark:bg-slate-100"
+                desktopClassName="mx-0 w-fit bg-slate-100"
                 mobileClassName=""
                 items={[
                   {
@@ -298,6 +379,12 @@ export default function RulesPage() {
                     icon: <IconDeviceFloppy className="h-full w-full text-slate-600" />,
                     onClick: handleSave,
                     disabled: saving || loadingRule,
+                  },
+                  {
+                    title: validating ? "Validating..." : "Validate",
+                    icon: <IconShieldCheck className="h-full w-full text-blue-600" />,
+                    onClick: () => runValidation(true),
+                    disabled: validating,
                   },
                   {
                     title: deleting ? "Deleting..." : "Delete",
