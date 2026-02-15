@@ -5,12 +5,27 @@ import {
   Chart as ChartJS,
   Legend,
   Tooltip,
+  type Plugin,
   type ChartOptions,
   type TooltipItem,
 } from "chart.js";
 import { Doughnut } from "react-chartjs-2";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
+
+const depthShadowPlugin: Plugin<"doughnut"> = {
+  id: "depthShadowDoughnut",
+  beforeDatasetsDraw(chart) {
+    const { ctx } = chart;
+    ctx.save();
+    ctx.shadowColor = "rgba(15, 23, 42, 0.18)";
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 8;
+  },
+  afterDatasetsDraw(chart) {
+    chart.ctx.restore();
+  },
+};
 
 export function AgentsStatusDoughnut({
   connected,
@@ -30,9 +45,8 @@ export function AgentsStatusDoughnut({
       {
         data: values,
         backgroundColor: ["#22c55e", "#f59e0b", "#64748b"],
-        borderColor: ["#14532d", "#78350f", "#1e293b"],
-        borderWidth: 1.2,
-        hoverOffset: 6,
+        borderWidth: 0,
+        hoverOffset: 10,
       },
     ],
   };
@@ -44,8 +58,17 @@ export function AgentsStatusDoughnut({
     animation: {
       animateRotate: true,
       animateScale: true,
-      duration: 900,
+      duration: 1200,
       easing: "easeOutQuart",
+      delay(ctx) {
+        return ctx.type === "data" ? ctx.dataIndex * 80 : 0;
+      },
+    },
+    animations: {
+      backgroundColor: {
+        duration: 900,
+        easing: "easeInOutQuad",
+      },
     },
     plugins: {
       legend: {
@@ -71,7 +94,7 @@ export function AgentsStatusDoughnut({
 
   return (
     <div className="h-[260px] w-full">
-      <Doughnut data={data} options={options} />
+      <Doughnut data={data} options={options} plugins={[depthShadowPlugin]} />
     </div>
   );
 }

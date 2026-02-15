@@ -10,6 +10,7 @@ import {
   LinearScale,
   PointElement,
   Tooltip,
+  type Plugin,
   type ChartOptions,
 } from "chart.js";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
@@ -28,6 +29,29 @@ ChartJS.register(
 const axisColor = "#475569";
 const gridColor = "rgba(148,163,184,0.2)";
 
+const depthShadowPlugin: Plugin = {
+  id: "depthShadow",
+  beforeDatasetsDraw(chart) {
+    const { ctx } = chart;
+    ctx.save();
+    ctx.shadowColor = "rgba(15, 23, 42, 0.14)";
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 7;
+  },
+  afterDatasetsDraw(chart) {
+    chart.ctx.restore();
+  },
+};
+
+function getBarGradient(chart: ChartJS, from: string, to: string) {
+  const area = chart.chartArea;
+  if (!area) return from;
+  const gradient = chart.ctx.createLinearGradient(0, area.bottom, 0, area.top);
+  gradient.addColorStop(0, from);
+  gradient.addColorStop(1, to);
+  return gradient;
+}
+
 export function RuntimeSplitChart({ containerCount, hostCount }: { containerCount: number; hostCount: number }) {
   return (
     <div className="h-[250px]">
@@ -38,8 +62,7 @@ export function RuntimeSplitChart({ containerCount, hostCount }: { containerCoun
             {
               data: [containerCount, hostCount],
               backgroundColor: ["#0ea5e9", "#1e293b"],
-              borderColor: ["#0369a1", "#0f172a"],
-              borderWidth: 1.2,
+              borderWidth: 0,
             },
           ],
         }}
@@ -47,11 +70,23 @@ export function RuntimeSplitChart({ containerCount, hostCount }: { containerCoun
           responsive: true,
           maintainAspectRatio: false,
           cutout: "60%",
-          animation: { duration: 850, animateRotate: true, animateScale: true, easing: "easeOutQuart" },
+          animation: {
+            duration: 1200,
+            animateRotate: true,
+            animateScale: true,
+            easing: "easeOutQuart",
+            delay(ctx) {
+              return ctx.type === "data" ? ctx.dataIndex * 90 : 0;
+            },
+          },
+          animations: {
+            backgroundColor: { duration: 900, easing: "easeInOutQuad" },
+          },
           plugins: {
             legend: { position: "bottom", labels: { color: axisColor } },
           },
         }}
+        plugins={[depthShadowPlugin]}
       />
     </div>
   );
@@ -68,9 +103,9 @@ export function OsDistributionChart({ labels, values }: { labels: string[]; valu
               label: "Agents",
               data: values,
               borderRadius: 8,
-              backgroundColor: "rgba(37,99,235,0.75)",
-              borderColor: "rgba(30,64,175,0.95)",
-              borderWidth: 1,
+              backgroundColor: (ctx) =>
+                getBarGradient(ctx.chart, "rgba(59,130,246,0.48)", "rgba(37,99,235,0.88)"),
+              borderWidth: 0,
             },
           ],
         }}
@@ -78,8 +113,14 @@ export function OsDistributionChart({ labels, values }: { labels: string[]; valu
           responsive: true,
           maintainAspectRatio: false,
           animation: {
-            duration: 950,
+            duration: 1200,
             easing: "easeOutQuart",
+            delay(ctx) {
+              return ctx.type === "data" ? ctx.dataIndex * 55 : 0;
+            },
+          },
+          animations: {
+            y: { duration: 1000, easing: "easeOutCubic" },
           },
           scales: {
             x: { ticks: { color: axisColor }, grid: { color: gridColor } },
@@ -89,6 +130,7 @@ export function OsDistributionChart({ labels, values }: { labels: string[]; valu
             legend: { display: false },
           },
         }}
+        plugins={[depthShadowPlugin]}
       />
     </div>
   );
@@ -104,7 +146,17 @@ export function HeartbeatRecencyChart({
   const options: ChartOptions<"line"> = {
     responsive: true,
     maintainAspectRatio: false,
-    animation: { duration: 900, easing: "easeInOutQuart" },
+    animation: {
+      duration: 1250,
+      easing: "easeInOutQuart",
+      delay(ctx) {
+        return ctx.type === "data" ? ctx.dataIndex * 35 : 0;
+      },
+    },
+    animations: {
+      y: { duration: 1000, easing: "easeOutCubic" },
+      tension: { duration: 900, easing: "easeInOutQuad" },
+    },
     scales: {
       x: { ticks: { color: axisColor }, grid: { color: gridColor } },
       y: { ticks: { color: axisColor, precision: 0 }, grid: { color: gridColor }, beginAtZero: true },
@@ -127,10 +179,12 @@ export function HeartbeatRecencyChart({
               tension: 0.35,
               pointRadius: 3,
               pointBackgroundColor: "#0369a1",
+              borderWidth: 2.4,
             },
           ],
         }}
         options={options}
+        plugins={[depthShadowPlugin]}
       />
     </div>
   );
@@ -160,19 +214,30 @@ export function RiskDistributionChart({
                 "rgba(249,115,22,0.75)",
                 "rgba(239,68,68,0.75)",
               ],
+              borderWidth: 0,
             },
           ],
         }}
         options={{
           responsive: true,
           maintainAspectRatio: false,
-          animation: { duration: 900, easing: "easeOutQuart" },
+          animation: {
+            duration: 1200,
+            easing: "easeOutQuart",
+            delay(ctx) {
+              return ctx.type === "data" ? ctx.dataIndex * 50 : 0;
+            },
+          },
+          animations: {
+            y: { duration: 1000, easing: "easeOutCubic" },
+          },
           scales: {
             x: { ticks: { color: axisColor }, grid: { color: gridColor } },
             y: { ticks: { color: axisColor, precision: 0 }, grid: { color: gridColor }, beginAtZero: true },
           },
           plugins: { legend: { display: false } },
         }}
+        plugins={[depthShadowPlugin]}
       />
     </div>
   );
@@ -196,7 +261,7 @@ export function ComplianceChart({
             {
               data: [compliant, review, unknown],
               backgroundColor: ["#22c55e", "#f59e0b", "#94a3b8"],
-              borderWidth: 1,
+              borderWidth: 0,
             },
           ],
         }}
@@ -204,11 +269,23 @@ export function ComplianceChart({
           responsive: true,
           maintainAspectRatio: false,
           cutout: "58%",
-          animation: { duration: 900, animateScale: true, animateRotate: true, easing: "easeOutQuart" },
+          animation: {
+            duration: 1200,
+            animateScale: true,
+            animateRotate: true,
+            easing: "easeOutQuart",
+            delay(ctx) {
+              return ctx.type === "data" ? ctx.dataIndex * 80 : 0;
+            },
+          },
+          animations: {
+            backgroundColor: { duration: 900, easing: "easeInOutQuad" },
+          },
           plugins: {
             legend: { position: "bottom", labels: { color: axisColor } },
           },
         }}
+        plugins={[depthShadowPlugin]}
       />
     </div>
   );
