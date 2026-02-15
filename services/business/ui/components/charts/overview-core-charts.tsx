@@ -28,6 +28,16 @@ ChartJS.register(
 
 const axisColor = "#475569";
 const gridColor = "rgba(148,163,184,0.2)";
+const slateBlue = "#1d4ed8";
+const slateBlueDark = "#1e3a8a";
+const emeraldDark = "#047857";
+const emeraldDeeper = "#065f46";
+const amberDark = "#b45309";
+const amberDeeper = "#92400e";
+const roseDark = "#be123c";
+const roseDeeper = "#9f1239";
+const slateDark = "#334155";
+const slateDeeper = "#1e293b";
 
 const depthShadowPlugin: Plugin = {
   id: "depthShadow",
@@ -61,7 +71,7 @@ export function RuntimeSplitChart({ containerCount, hostCount }: { containerCoun
           datasets: [
             {
               data: [containerCount, hostCount],
-              backgroundColor: ["#0ea5e9", "#1e293b"],
+              backgroundColor: [slateBlue, slateDark],
               borderWidth: 0,
             },
           ],
@@ -104,7 +114,7 @@ export function OsDistributionChart({ labels, values }: { labels: string[]; valu
               data: values,
               borderRadius: 8,
               backgroundColor: (ctx) =>
-                getBarGradient(ctx.chart, "rgba(59,130,246,0.48)", "rgba(37,99,235,0.88)"),
+                getBarGradient(ctx.chart, "rgba(30,58,138,0.55)", "rgba(29,78,216,0.9)"),
               borderWidth: 0,
             },
           ],
@@ -173,12 +183,12 @@ export function HeartbeatRecencyChart({
             {
               label: "Agents",
               data: values,
-              borderColor: "#0ea5e9",
-              backgroundColor: "rgba(14,165,233,0.18)",
+              borderColor: slateBlue,
+              backgroundColor: "rgba(30,58,138,0.2)",
               fill: true,
               tension: 0.35,
               pointRadius: 3,
-              pointBackgroundColor: "#0369a1",
+              pointBackgroundColor: slateBlueDark,
               borderWidth: 2.4,
             },
           ],
@@ -207,13 +217,17 @@ export function RiskDistributionChart({
               label: "Agents",
               data: values,
               borderRadius: 8,
-              backgroundColor: [
-                "rgba(16,185,129,0.75)",
-                "rgba(59,130,246,0.75)",
-                "rgba(234,179,8,0.75)",
-                "rgba(249,115,22,0.75)",
-                "rgba(239,68,68,0.75)",
-              ],
+              backgroundColor: (ctx) => {
+                const colorPairs: [string, string][] = [
+                  ["rgba(6,95,70,0.5)", emeraldDark],
+                  ["rgba(30,58,138,0.5)", slateBlue],
+                  ["rgba(146,64,14,0.5)", amberDark],
+                  ["rgba(154,52,18,0.55)", amberDeeper],
+                  ["rgba(136,19,55,0.55)", roseDark],
+                ];
+                const pair = colorPairs[ctx.dataIndex] || ["rgba(30,58,138,0.5)", slateBlue];
+                return getBarGradient(ctx.chart, pair[0], pair[1]);
+              },
               borderWidth: 0,
             },
           ],
@@ -260,7 +274,7 @@ export function ComplianceChart({
           datasets: [
             {
               data: [compliant, review, unknown],
-              backgroundColor: ["#22c55e", "#f59e0b", "#94a3b8"],
+              backgroundColor: [emeraldDark, amberDark, slateDark],
               borderWidth: 0,
             },
           ],
@@ -284,6 +298,178 @@ export function ComplianceChart({
           plugins: {
             legend: { position: "bottom", labels: { color: axisColor } },
           },
+        }}
+        plugins={[depthShadowPlugin]}
+      />
+    </div>
+  );
+}
+
+export function FindingsSeverityMixChart({
+  critical,
+  high,
+  medium,
+  low,
+}: {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}) {
+  return (
+    <div className="h-[260px]">
+      <Bar
+        data={{
+          labels: ["Critical", "High", "Medium", "Low"],
+          datasets: [
+            {
+              label: "CVEs",
+              data: [critical, high, medium, low],
+              borderRadius: 10,
+              backgroundColor: (ctx) => {
+                const colorPairs: [string, string][] = [
+                  ["rgba(159,18,57,0.6)", roseDark],
+                  ["rgba(190,24,93,0.55)", roseDeeper],
+                  ["rgba(146,64,14,0.55)", amberDark],
+                  ["rgba(30,58,138,0.5)", slateBlue],
+                ];
+                const pair = colorPairs[ctx.dataIndex] || ["rgba(30,58,138,0.5)", slateBlue];
+                return getBarGradient(ctx.chart, pair[0], pair[1]);
+              },
+              borderWidth: 0,
+            },
+          ],
+        }}
+        options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: {
+            duration: 1200,
+            easing: "easeOutQuart",
+            delay(ctx) {
+              return ctx.type === "data" ? ctx.dataIndex * 65 : 0;
+            },
+          },
+          scales: {
+            x: { ticks: { color: axisColor }, grid: { color: gridColor } },
+            y: { ticks: { color: axisColor, precision: 0 }, grid: { color: gridColor }, beginAtZero: true },
+          },
+          plugins: { legend: { display: false } },
+        }}
+        plugins={[depthShadowPlugin]}
+      />
+    </div>
+  );
+}
+
+export function OpenResolvedDetectionsChart({ open, resolved }: { open: number; resolved: number }) {
+  return (
+    <div className="h-[250px]">
+      <Doughnut
+        data={{
+          labels: ["Open", "Resolved"],
+          datasets: [
+            {
+              data: [open, resolved],
+              backgroundColor: [slateBlueDark, emeraldDeeper],
+              borderWidth: 0,
+              hoverOffset: 10,
+            },
+          ],
+        }}
+        options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: "58%",
+          animation: {
+            duration: 1200,
+            animateScale: true,
+            animateRotate: true,
+            easing: "easeOutQuart",
+            delay(ctx) {
+              return ctx.type === "data" ? ctx.dataIndex * 90 : 0;
+            },
+          },
+          plugins: {
+            legend: { position: "bottom", labels: { color: axisColor } },
+          },
+        }}
+        plugins={[depthShadowPlugin]}
+      />
+    </div>
+  );
+}
+
+export function TopVulnerablePackagesChart({ labels, values }: { labels: string[]; values: number[] }) {
+  return (
+    <div className="h-[300px]">
+      <Bar
+        data={{
+          labels,
+          datasets: [
+            {
+              label: "CVEs",
+              data: values,
+              borderRadius: 8,
+              backgroundColor: (ctx) => getBarGradient(ctx.chart, "rgba(15,23,42,0.55)", "rgba(30,58,138,0.9)"),
+              borderWidth: 0,
+            },
+          ],
+        }}
+        options={{
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: {
+            duration: 1150,
+            easing: "easeOutQuart",
+            delay(ctx) {
+              return ctx.type === "data" ? ctx.dataIndex * 45 : 0;
+            },
+          },
+          scales: {
+            x: { ticks: { color: axisColor, precision: 0 }, grid: { color: gridColor }, beginAtZero: true },
+            y: { ticks: { color: axisColor }, grid: { display: false } },
+          },
+          plugins: { legend: { display: false } },
+        }}
+        plugins={[depthShadowPlugin]}
+      />
+    </div>
+  );
+}
+
+export function PackageInventorySizeChart({ labels, values }: { labels: string[]; values: number[] }) {
+  return (
+    <div className="h-[300px]">
+      <Bar
+        data={{
+          labels,
+          datasets: [
+            {
+              label: "Packages",
+              data: values,
+              borderRadius: 8,
+              backgroundColor: (ctx) => getBarGradient(ctx.chart, "rgba(6,95,70,0.45)", "rgba(4,120,87,0.9)"),
+              borderWidth: 0,
+            },
+          ],
+        }}
+        options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: {
+            duration: 1100,
+            easing: "easeOutQuart",
+            delay(ctx) {
+              return ctx.type === "data" ? ctx.dataIndex * 40 : 0;
+            },
+          },
+          scales: {
+            x: { ticks: { color: axisColor }, grid: { display: false } },
+            y: { ticks: { color: axisColor, precision: 0 }, grid: { color: gridColor }, beginAtZero: true },
+          },
+          plugins: { legend: { display: false } },
         }}
         plugins={[depthShadowPlugin]}
       />

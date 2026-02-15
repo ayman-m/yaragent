@@ -4,17 +4,22 @@ import { useAgents } from "@/components/agent-context";
 import { AgentsStatusDoughnut } from "@/components/charts/agents-status-doughnut";
 import {
   ComplianceChart,
+  FindingsSeverityMixChart,
   HeartbeatRecencyChart,
+  OpenResolvedDetectionsChart,
   OsDistributionChart,
+  PackageInventorySizeChart,
   RiskDistributionChart,
   RuntimeSplitChart,
+  TopVulnerablePackagesChart,
 } from "@/components/charts/overview-core-charts";
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { WobbleCard } from "@/components/ui/wobble-card";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export default function OverviewPage() {
-  const { agents, error } = useAgents();
+  const { agents, error, getAgentProfile } = useAgents();
+  const [profilesByAgent, setProfilesByAgent] = useState<Record<string, { sbom: Array<Record<string, unknown>>; cves: Array<Record<string, unknown>> }>>({});
 
   const connectedCount = useMemo(() => agents.filter((a) => a.status === "connected").length, [agents]);
   const staleCount = useMemo(() => agents.filter((a) => a.status === "stale").length, [agents]);
@@ -90,6 +95,91 @@ export default function OverviewPage() {
     }
     return { compliant, review, unknown };
   }, [agents]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (agents.length === 0) {
+      setProfilesByAgent({});
+      return;
+    }
+
+    const load = async () => {
+      const results = await Promise.allSettled(
+        agents.map(async (agent) => {
+          const profile = await getAgentProfile(agent.id);
+          return {
+            id: agent.id,
+            sbom: profile.sbom,
+            cves: profile.cves,
+          };
+        })
+      );
+      if (cancelled) return;
+      const next: Record<string, { sbom: Array<Record<string, unknown>>; cves: Array<Record<string, unknown>> }> = {};
+      for (const r of results) {
+        if (r.status === "fulfilled") {
+          next[r.value.id] = { sbom: r.value.sbom, cves: r.value.cves };
+        }
+      }
+      setProfilesByAgent(next);
+    };
+
+    load().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [agents, getAgentProfile]);
+
+  const detectionMetrics = useMemo(() => {
+    const allCves = Object.values(profilesByAgent).flatMap((p) => p.cves);
+    let critical = 0;
+    let high = 0;
+    let medium = 0;
+    let low = 0;
+    let resolved = 0;
+    let open = 0;
+    const pkgCounts = new Map<string, number>();
+
+    for (const cve of allCves) {
+      const severity = String(cve.severity || "").toLowerCase();
+      if (severity === "critical") critical += 1;
+      else if (severity === "high") high += 1;
+      else if (severity === "medium") medium += 1;
+      else if (severity === "low") low += 1;
+
+      const status = String(cve.status || "").toLowerCase();
+      if (status === "resolved" || status === "closed" || status === "fixed") resolved += 1;
+      else open += 1;
+
+      const pkg = String(cve.package || cve.component || cve.name || "").trim();
+      if (pkg) pkgCounts.set(pkg, (pkgCounts.get(pkg) || 0) + 1);
+    }
+
+    const topPackages = [...pkgCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+    return {
+      critical,
+      high,
+      medium,
+      low,
+      open,
+      resolved,
+      topPackageLabels: topPackages.map(([k]) => k),
+      topPackageValues: topPackages.map(([, v]) => v),
+    };
+  }, [profilesByAgent]);
+
+  const packageInventory = useMemo(() => {
+    const rows = agents.map((agent) => {
+      const sbomCount = profilesByAgent[agent.id]?.sbom?.length || 0;
+      const assetName = String(agent.assetProfile?.asset_name || agent.id).trim();
+      return { label: assetName, value: sbomCount };
+    });
+    const top = rows.sort((a, b) => b.value - a.value).slice(0, 10);
+    return {
+      labels: top.map((r) => r.label),
+      values: top.map((r) => r.value),
+    };
+  }, [agents, profilesByAgent]);
 
   return (
     <>
@@ -168,6 +258,50 @@ export default function OverviewPage() {
                 review={compliance.review}
                 unknown={compliance.unknown}
               />
+            </div>
+          </WobbleCard>
+        </section>
+
+        <section className="mt-4 grid gap-4 lg:grid-cols-2">
+          <WobbleCard containerClassName="min-h-[360px]">
+            <h2 className="text-lg font-semibold text-slate-900">Findings Severity Mix</h2>
+            <p className="mt-1 text-sm text-slate-600">Critical, high, medium, and low CVE volume</p>
+            <div className="mt-3">
+              <FindingsSeverityMixChart
+                critical={detectionMetrics.critical}
+                high={detectionMetrics.high}
+                medium={detectionMetrics.medium}
+                low={detectionMetrics.low}
+              />
+            </div>
+          </WobbleCard>
+
+          <WobbleCard containerClassName="min-h-[360px]">
+            <h2 className="text-lg font-semibold text-slate-900">Open vs Resolved Detections</h2>
+            <p className="mt-1 text-sm text-slate-600">Current detection lifecycle split</p>
+            <div className="mt-3">
+              <OpenResolvedDetectionsChart open={detectionMetrics.open} resolved={detectionMetrics.resolved} />
+            </div>
+          </WobbleCard>
+        </section>
+
+        <section className="mt-4 grid gap-4 lg:grid-cols-2">
+          <WobbleCard containerClassName="min-h-[400px]">
+            <h2 className="text-lg font-semibold text-slate-900">Vulnerable Packages Top 10</h2>
+            <p className="mt-1 text-sm text-slate-600">Packages with highest CVE count</p>
+            <div className="mt-3">
+              <TopVulnerablePackagesChart
+                labels={detectionMetrics.topPackageLabels}
+                values={detectionMetrics.topPackageValues}
+              />
+            </div>
+          </WobbleCard>
+
+          <WobbleCard containerClassName="min-h-[400px]">
+            <h2 className="text-lg font-semibold text-slate-900">Package Inventory Size</h2>
+            <p className="mt-1 text-sm text-slate-600">Installed package volume per agent</p>
+            <div className="mt-3">
+              <PackageInventorySizeChart labels={packageInventory.labels} values={packageInventory.values} />
             </div>
           </WobbleCard>
         </section>

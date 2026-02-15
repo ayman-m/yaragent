@@ -44,7 +44,7 @@ export function AgentsStatusDoughnut({
     datasets: [
       {
         data: values,
-        backgroundColor: ["#22c55e", "#f59e0b", "#64748b"],
+        backgroundColor: ["#065f46", "#b45309", "#334155"],
         borderWidth: 0,
         hoverOffset: 10,
       },
