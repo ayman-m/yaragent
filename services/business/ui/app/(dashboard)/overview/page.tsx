@@ -1,7 +1,9 @@
 "use client";
 
 import { useAgents } from "@/components/agent-context";
+import { AgentsStatusDoughnut } from "@/components/charts/agents-status-doughnut";
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
+import { WobbleCard } from "@/components/ui/wobble-card";
 import { useMemo } from "react";
 
 export default function OverviewPage() {
@@ -34,13 +36,23 @@ export default function OverviewPage() {
           </div>
         )}
 
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold">Operational Notes</h2>
-          <ul className="mt-3 space-y-2 text-sm text-slate-600">
-            <li>Connected agents accept policy push and compile validation.</li>
-            <li>Stale agents exceeded heartbeat threshold and require network/runtime checks.</li>
-            <li>Disconnected agents are retained for historical visibility.</li>
-          </ul>
+        <section className="mt-6 grid gap-4 lg:grid-cols-3">
+          <WobbleCard containerClassName="lg:col-span-2 min-h-[360px]">
+            <h2 className="text-lg font-semibold text-white">Agent Status Breakdown</h2>
+            <p className="mt-1 text-sm text-slate-300">Phase 1 baseline widget powered by Chart.js</p>
+            <div className="mt-4">
+              <AgentsStatusDoughnut connected={connectedCount} stale={staleCount} disconnected={disconnectedCount} />
+            </div>
+          </WobbleCard>
+
+          <WobbleCard containerClassName="min-h-[360px] bg-[#111827]">
+            <h2 className="text-lg font-semibold text-white">Phase 1 Notes</h2>
+            <ul className="mt-3 space-y-2 text-sm text-slate-300">
+              <li>Chart.js + react-chartjs-2 integrated.</li>
+              <li>Reusable WobbleCard wrapper added.</li>
+              <li>Next phases will add full widget grid.</li>
+            </ul>
+          </WobbleCard>
         </section>
       </main>
     </>
