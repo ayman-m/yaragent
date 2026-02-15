@@ -3,7 +3,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { cn } from "@/lib/utils";
-import { ColourfulText } from "@/components/ui/colourful-text";
 
 export const LayoutTextFlip = ({
   text = "",
@@ -50,7 +49,7 @@ export const LayoutTextFlip = ({
       <motion.span
         layout
         className={cn(
-          "relative inline-flex min-w-[8ch] items-center justify-center overflow-hidden rounded-md border border-slate-300/80 bg-white px-2.5 py-1 text-sm font-semibold text-slate-900 shadow-sm md:text-base",
+          "relative inline-flex min-w-[8ch] items-center justify-center overflow-hidden rounded-md border border-slate-300/80 bg-white px-2.5 py-1 text-lg font-semibold text-slate-900 shadow-sm md:text-2xl",
           wordClassName
         )}
       >
@@ -61,9 +60,12 @@ export const LayoutTextFlip = ({
             animate={{ y: 0, filter: "blur(0px)", opacity: 1 }}
             exit={{ y: 24, filter: "blur(8px)", opacity: 0 }}
             transition={{ duration: 0.35 }}
-            className="inline-block whitespace-nowrap"
+            className={cn(
+              "inline-block whitespace-nowrap",
+              isColourful ? "text-[color:var(--color-info)]" : "text-black"
+            )}
           >
-            {isColourful ? <ColourfulText text={currentWord} /> : currentWord}
+            {currentWord}
           </motion.span>
         </AnimatePresence>
       </motion.span>

@@ -195,14 +195,14 @@ function SidebarLink({
         open ? "justify-start gap-3" : "justify-center",
         active
           ? "border border-neutral-700 bg-neutral-900 text-white shadow-lg shadow-black/30"
-          : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100"
+          : "text-white hover:bg-neutral-900 hover:text-white"
       )}
     >
       {active && <motion.div layoutId="manuarora-sidebar-active" className="absolute inset-0 rounded-xl" />}
-      <Icon className={cn("relative z-10 h-5 w-5", active ? "text-white" : "text-neutral-400")} />
+      <Icon className={cn("relative z-10 h-5 w-5", active ? "text-white" : "text-neutral-200")} />
       <motion.span
         animate={{ opacity: open ? 1 : 0, width: open ? "auto" : 0 }}
-        className="relative z-10 overflow-hidden whitespace-nowrap text-sm font-medium"
+        className="relative z-10 overflow-hidden whitespace-nowrap text-sm font-medium text-white"
       >
         {link.label}
       </motion.span>
