@@ -18,12 +18,6 @@ services:
     networks:
       - yaragent-net
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9000/minio/health/live || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
 
   postgres:
     build:
@@ -96,7 +90,7 @@ services:
       postgres:
         condition: service_healthy
       minio:
-        condition: service_healthy
+        condition: service_started
     networks:
       - yaragent-net
     restart: "no"
