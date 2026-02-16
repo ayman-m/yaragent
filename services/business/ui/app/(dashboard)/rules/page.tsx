@@ -305,7 +305,7 @@ export default function RulesPage() {
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <div className="flex min-h-0 flex-col gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white p-3">
             <div className="grid gap-3 border-b border-slate-200 p-3 md:grid-cols-[1fr_auto]">
               <input
                 value={draftName}
@@ -319,7 +319,7 @@ export default function RulesPage() {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 p-3">
+            <div className="min-h-0 flex-1">
               <div className="relative overflow-hidden rounded-xl p-[1px]">
                 <div className="absolute inset-0">
                   <MovingBorder duration={3500} rx="20%" ry="20%">
@@ -339,7 +339,7 @@ export default function RulesPage() {
               </div>
             </div>
 
-            <div className="border-t border-slate-200 px-3 py-2 text-sm">
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm">
               <div className="mb-3 flex items-center gap-2 text-slate-600">
                 {validating ? (
                   <>
@@ -396,7 +396,7 @@ export default function RulesPage() {
               />
             </div>
 
-            <div className="border-t border-slate-200 px-3 py-2 text-xs text-slate-500">
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <p>Selected: {selectedName || "New file"}</p>
                 <p>Length: {editorValue.length} chars</p>
