@@ -9,6 +9,8 @@ import re
 import shutil
 import subprocess
 import tempfile
+import urllib.error
+import urllib.request
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -62,6 +64,9 @@ YARA_STORAGE_ACCESS_KEY = os.getenv("YARA_STORAGE_ACCESS_KEY", "yaragent")
 YARA_STORAGE_SECRET_KEY = os.getenv("YARA_STORAGE_SECRET_KEY", "yaragent-minio-secret")
 YARA_STORAGE_BUCKET = os.getenv("YARA_STORAGE_BUCKET", "yaragent-rules")
 YARA_STORAGE_USE_SSL = (os.getenv("YARA_STORAGE_USE_SSL", "false").strip().lower() in {"1", "true", "yes", "on"})
+GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY", "") or os.getenv("VERTEX_API_KEY", "")).strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip()
+GEMINI_API_BASE = os.getenv("GEMINI_API_BASE", "https://generativelanguage.googleapis.com/v1beta").strip()
 
 _db_pool: Optional[asyncpg.Pool] = None
 _cleanup_task: Optional[asyncio.Task] = None
@@ -553,6 +558,89 @@ def _validate_yara_with_yarac(name: str, content: str) -> dict:
             "errors": _parse_yarac_errors(combined),
             "raw": combined,
         }
+
+
+YARA_ASSISTANT_SYSTEM_PROMPT = """You are YARAgent Rule Assistant, an expert in writing, reviewing, and refactoring YARA rules.
+
+Your responsibilities:
+1) Help users create new YARA rules and improve existing rules.
+2) Explain detection logic clearly and concisely.
+3) Prefer safe, maintainable, and performant patterns.
+4) If user asks for edits, provide complete updated rule text unless they asked for only a diff.
+5) When giving suggestions, preserve existing intent and metadata when possible.
+
+Constraints:
+- Focus only on YARA-related tasks.
+- Do not invent unsupported fields or syntax.
+- If context is missing, ask one concise clarifying question.
+- Keep responses actionable.
+"""
+
+
+def _call_gemini_yara_assistant(user_message: str, history: list[dict], rule_name: str, rule_content: str) -> str:
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY (or VERTEX_API_KEY) is not configured")
+
+    contents = []
+    for item in history:
+        role = str(item.get("role") or "user").strip().lower()
+        text = str(item.get("content") or "").strip()
+        if not text:
+            continue
+        if role not in {"user", "model"}:
+            role = "user"
+        contents.append({"role": role, "parts": [{"text": text}]})
+
+    contextual_user_text = (
+        f"Current rule file: {rule_name}\n\n"
+        f"Current rule content:\n```yara\n{rule_content}\n```\n\n"
+        f"User request:\n{user_message}"
+    )
+    contents.append({"role": "user", "parts": [{"text": contextual_user_text}]})
+
+    payload = {
+        "system_instruction": {
+            "parts": [{"text": YARA_ASSISTANT_SYSTEM_PROMPT}],
+        },
+        "contents": contents,
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": 2048,
+        },
+    }
+
+    req = urllib.request.Request(
+        f"{GEMINI_API_BASE}/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw = resp.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        err_body = ""
+        try:
+            err_body = exc.read().decode("utf-8")
+        except Exception:
+            pass
+        raise RuntimeError(f"Gemini API error {exc.code}: {err_body or exc.reason}")
+    except Exception as exc:
+        raise RuntimeError(f"Gemini request failed: {exc}")
+
+    data = json.loads(raw)
+    candidates = data.get("candidates") or []
+    if not candidates:
+        raise RuntimeError("Gemini returned no candidates")
+    parts = ((candidates[0] or {}).get("content") or {}).get("parts") or []
+    out = []
+    for p in parts:
+        txt = p.get("text")
+        if isinstance(txt, str) and txt.strip():
+            out.append(txt.strip())
+    if not out:
+        raise RuntimeError("Gemini returned an empty response")
+    return "\n\n".join(out)
 
 
 async def _upsert_rule_metadata(
@@ -1178,6 +1266,40 @@ async def validate_yara_rule(payload: dict, user: dict = Depends(get_current_use
         raise HTTPException(status_code=502, detail=f"validation failed: {exc}")
 
     return JSONResponse(result)
+
+
+@app.post("/yara/assistant")
+async def yara_assistant(payload: dict, user: dict = Depends(get_current_user)) -> JSONResponse:
+    _ensure_yara_storage_enabled()
+    _ = _tenant_for_request(user, payload.get("tenant_id"))
+    rule_name = _validate_yara_rule_name(str(payload.get("rule_name") or "rule.yar"))
+    rule_content = str(payload.get("rule_content") or "")
+    if len(rule_content.encode("utf-8")) > 1024 * 1024:
+        raise HTTPException(status_code=400, detail="rule content exceeds 1MB limit")
+    message = str(payload.get("message") or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+    history = payload.get("history")
+    if not isinstance(history, list):
+        history = []
+    clean_history = []
+    for item in history[:20]:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        content = str(item.get("content") or "").strip()
+        if role not in {"user", "model"} or not content:
+            continue
+        clean_history.append({"role": role, "content": content})
+
+    try:
+        reply = await asyncio.to_thread(_call_gemini_yara_assistant, message, clean_history, rule_name, rule_content)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    except Exception as exc:
+        logger.exception("yara assistant request failed")
+        raise HTTPException(status_code=502, detail=f"assistant error: {exc}")
+    return JSONResponse({"reply": reply})
 
 
 @app.websocket("/agent/ws")

@@ -6,11 +6,14 @@ import { CodeBlock } from "@/components/ui/code-block";
 import { FloatingDock } from "@/components/ui/floating-dock";
 import { MovingBorder } from "@/components/ui/moving-border";
 import {
+  IconChevronLeft,
+  IconChevronRight,
   IconDeviceFloppy,
   IconFilePlus,
   IconCircleCheck,
   IconShieldCheck,
   IconRefresh,
+  IconSend2,
   IconTrash,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -30,7 +33,7 @@ const DEFAULT_TEMPLATE = `rule example_rule {
 type SortField = "name" | "updatedAt" | "size";
 
 export default function RulesPage() {
-  const { listYaraRules, getYaraRule, createYaraRule, updateYaraRule, deleteYaraRule, validateYaraRule } = useAgents();
+  const { listYaraRules, getYaraRule, createYaraRule, updateYaraRule, deleteYaraRule, validateYaraRule, askYaraAssistant } = useAgents();
   const [rules, setRules] = useState<YaraRuleFile[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("new_rule.yar");
@@ -46,6 +49,12 @@ export default function RulesPage() {
   const [validating, setValidating] = useState(false);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const [validationMarkers, setValidationMarkers] = useState<CodeBlockMarker[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "model"; content: string }>>([
+    { role: "model", content: "I can help write, improve, and validate your YARA rules. Ask for a new rule or edits." },
+  ]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -198,6 +207,32 @@ export default function RulesPage() {
     }
   };
 
+  const sendChat = async () => {
+    const msg = chatInput.trim();
+    if (!msg || chatBusy) return;
+    const priorHistory = chatMessages.slice(-10);
+    const nextHistory = [...chatMessages, { role: "user" as const, content: msg }];
+    setChatMessages(nextHistory);
+    setChatInput("");
+    setChatBusy(true);
+    try {
+      const reply = await askYaraAssistant({
+        ruleName: draftName.trim() || "rule.yar",
+        ruleContent: editorValue,
+        message: msg,
+        history: priorHistory,
+      });
+      setChatMessages((prev) => [...prev, { role: "model", content: reply }]);
+    } catch (err: any) {
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "model", content: `Assistant error: ${err.message || "request failed"}` },
+      ]);
+    } finally {
+      setChatBusy(false);
+    }
+  };
+
   useEffect(() => {
     if (!editorValue.trim()) {
       setValidationMarkers([]);
@@ -245,7 +280,11 @@ export default function RulesPage() {
         {error ? <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
         {notice ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</div> : null}
 
-        <section className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[320px_1fr]">
+        <section
+          className={`grid min-h-0 flex-1 gap-4 ${
+            chatOpen ? "lg:grid-cols-[260px_minmax(0,1fr)_340px]" : "lg:grid-cols-[260px_minmax(0,1fr)]"
+          }`}
+        >
           <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
             <div className="border-b border-slate-200 p-3">
               <input
@@ -305,7 +344,25 @@ export default function RulesPage() {
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-col gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white p-3">
+          <div className="relative flex min-h-0 flex-col gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white p-3">
+            <button
+              type="button"
+              onClick={() => setChatOpen((v) => !v)}
+              className="absolute right-2 top-2 z-20 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+              title={chatOpen ? "Collapse assistant" : "Open assistant"}
+            >
+              {chatOpen ? (
+                <>
+                  <IconChevronRight className="h-3.5 w-3.5" />
+                  Assistant
+                </>
+              ) : (
+                <>
+                  <IconChevronLeft className="h-3.5 w-3.5" />
+                  Assistant
+                </>
+              )}
+            </button>
             <div className="grid gap-3 border-b border-slate-200 p-3 md:grid-cols-[1fr_auto]">
               <input
                 value={draftName}
@@ -405,6 +462,47 @@ export default function RulesPage() {
               </div>
             </div>
           </div>
+
+          {chatOpen ? (
+            <aside className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="border-b border-slate-200 px-3 py-2">
+                <p className="text-sm font-semibold text-slate-800">Gemini Assistant</p>
+                <p className="text-xs text-slate-500">Rule-aware help for create/edit/refactor</p>
+              </div>
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
+                {chatMessages.map((m, idx) => (
+                  <div
+                    key={`${m.role}-${idx}`}
+                    className={`rounded-lg px-3 py-2 text-sm ${
+                      m.role === "user" ? "ml-6 bg-blue-50 text-blue-900" : "mr-6 bg-slate-100 text-slate-800"
+                    }`}
+                  >
+                    <p className="mb-1 text-[10px] uppercase tracking-wide opacity-60">{m.role === "user" ? "You" : "Gemini"}</p>
+                    <pre className="whitespace-pre-wrap font-sans">{m.content}</pre>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-slate-200 p-3">
+                <div className="flex items-end gap-2">
+                  <textarea
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Ask to create or improve this rule..."
+                    className="min-h-[76px] flex-1 resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-slate-400 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={sendChat}
+                    disabled={chatBusy || !chatInput.trim()}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    title="Send"
+                  >
+                    <IconSend2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </aside>
+          ) : null}
         </section>
       </main>
     </>

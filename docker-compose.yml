@@ -123,6 +123,10 @@ services:
       - YARA_STORAGE_SECRET_KEY=${YARA_STORAGE_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-yaragent-minio-secret}}
       - YARA_STORAGE_BUCKET=${YARA_STORAGE_BUCKET:-yaragent-rules}
       - YARA_STORAGE_USE_SSL=${YARA_STORAGE_USE_SSL:-false}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - VERTEX_API_KEY=${VERTEX_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
+      - GEMINI_API_BASE=${GEMINI_API_BASE:-https://generativelanguage.googleapis.com/v1beta}
     depends_on:
       init:
         condition: service_completed_successfully

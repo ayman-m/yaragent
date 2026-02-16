@@ -58,6 +58,11 @@ export interface YaraValidationResult {
   errors: YaraValidationError[];
 }
 
+export interface YaraAssistantMessage {
+  role: "user" | "model";
+  content: string;
+}
+
 interface SetupSettings {
   org_name: string;
   environment: string;
@@ -81,6 +86,12 @@ interface AgentContextType {
   updateYaraRule: (name: string, content: string) => Promise<YaraRuleContent>;
   deleteYaraRule: (name: string) => Promise<void>;
   validateYaraRule: (name: string, content: string) => Promise<YaraValidationResult>;
+  askYaraAssistant: (params: {
+    ruleName: string;
+    ruleContent: string;
+    message: string;
+    history: YaraAssistantMessage[];
+  }) => Promise<string>;
   checkSetupStatus: () => Promise<SetupStatus>;
   setupAdmin: (username: string, password: string, settings: SetupSettings, setupToken?: string) => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
@@ -484,6 +495,39 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     [token, withAuthHeaders, handleUnauthorized]
   );
 
+  const askYaraAssistant = useCallback(
+    async (params: {
+      ruleName: string;
+      ruleContent: string;
+      message: string;
+      history: YaraAssistantMessage[];
+    }): Promise<string> => {
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
+      const res = await fetch(`${API_BASE}/yara/assistant`, {
+        method: "POST",
+        headers: withAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          rule_name: params.ruleName,
+          rule_content: params.ruleContent,
+          message: params.message,
+          history: params.history,
+        }),
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          handleUnauthorized();
+        }
+        const msg = await res.text();
+        throw new Error(`HTTP ${res.status} ${msg}`);
+      }
+      const data = await res.json();
+      return String(data?.reply || "");
+    },
+    [token, withAuthHeaders, handleUnauthorized]
+  );
+
   return (
     <AgentContext.Provider
       value={{
@@ -498,6 +542,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
         updateYaraRule,
         deleteYaraRule,
         validateYaraRule,
+        askYaraAssistant,
         checkSetupStatus,
         setupAdmin,
         login,

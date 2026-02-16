@@ -14,6 +14,7 @@ Endpoints:
 - `PUT /yara/rules/{name}` (JWT/API-token protected)
 - `DELETE /yara/rules/{name}` (JWT/API-token protected)
 - `POST /yara/validate` (JWT/API-token protected)
+- `POST /yara/assistant` (JWT/API-token protected)
 - `POST /push_rule` (JWT/API-token protected)
 - `WS /agent/ws` (agent channel)
 
@@ -35,3 +36,6 @@ Optional env vars:
 - `YARA_STORAGE_SECRET_KEY`
 - `YARA_STORAGE_BUCKET`
 - `YARA_STORAGE_USE_SSL`
+- `GEMINI_API_KEY` (or `VERTEX_API_KEY` fallback)
+- `GEMINI_MODEL` (default `gemini-1.5-flash`)
+- `GEMINI_API_BASE` (default `https://generativelanguage.googleapis.com/v1beta`)
