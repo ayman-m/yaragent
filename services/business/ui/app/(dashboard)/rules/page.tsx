@@ -5,12 +5,15 @@ import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { CodeBlock } from "@/components/ui/code-block";
 import { FloatingDock } from "@/components/ui/floating-dock";
 import { MovingBorder } from "@/components/ui/moving-border";
+import { VerticalTracingBeam } from "@/components/ui/vertical-tracing-beam";
 import {
   IconChevronLeft,
   IconChevronRight,
   IconDeviceFloppy,
   IconFilePlus,
   IconCircleCheck,
+  IconMail,
+  IconMailOpened,
   IconShieldCheck,
   IconRefresh,
   IconSend2,
@@ -18,6 +21,7 @@ import {
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CodeBlockMarker } from "@/components/ui/code-block";
+import { motion } from "motion/react";
 
 const DEFAULT_TEMPLATE = `rule example_rule {
   meta:
@@ -345,23 +349,36 @@ export default function RulesPage() {
           </div>
 
           <div className="relative flex min-h-0 flex-col gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white p-3">
+            {chatOpen ? (
+              <div className="pointer-events-none absolute -right-2 top-3 bottom-3 z-10 hidden lg:block">
+                <VerticalTracingBeam className="h-full" />
+              </div>
+            ) : null}
+            <motion.button
+              type="button"
+              onClick={() => setChatOpen((v) => !v)}
+              className="absolute -right-5 top-1/2 z-30 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-blue-200/90 bg-white text-blue-700 shadow-[0_0_18px_rgba(26,115,232,0.35)] transition hover:bg-blue-50 lg:inline-flex"
+              title={chatOpen ? "Collapse assistant" : "Open assistant"}
+              animate={chatOpen ? { boxShadow: "0 0 10px rgba(26,115,232,0.2)" } : { boxShadow: ["0 0 10px rgba(26,115,232,0.25)", "0 0 22px rgba(26,115,232,0.5)", "0 0 10px rgba(26,115,232,0.25)"] }}
+              transition={chatOpen ? { duration: 0.25 } : { duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <span className="sr-only">{chatOpen ? "Collapse assistant" : "Open assistant"}</span>
+              <motion.span
+                className="relative inline-flex items-center justify-center"
+                animate={chatOpen ? { scale: 1 } : { scale: [1, 1.08, 1] }}
+                transition={chatOpen ? { duration: 0.2 } : { duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+              >
+                {chatOpen ? <IconMailOpened className="h-5 w-5" /> : <IconMail className="h-5 w-5" />}
+                {chatOpen ? <IconChevronRight className="absolute -right-3 h-3 w-3" /> : <IconChevronLeft className="absolute -left-3 h-3 w-3" />}
+              </motion.span>
+            </motion.button>
             <button
               type="button"
               onClick={() => setChatOpen((v) => !v)}
-              className="absolute right-2 top-2 z-20 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+              className="absolute right-2 top-2 z-30 inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-white text-blue-700 lg:hidden"
               title={chatOpen ? "Collapse assistant" : "Open assistant"}
             >
-              {chatOpen ? (
-                <>
-                  <IconChevronRight className="h-3.5 w-3.5" />
-                  Assistant
-                </>
-              ) : (
-                <>
-                  <IconChevronLeft className="h-3.5 w-3.5" />
-                  Assistant
-                </>
-              )}
+              {chatOpen ? <IconMailOpened className="h-4 w-4" /> : <IconMail className="h-4 w-4" />}
             </button>
             <div className="grid gap-3 border-b border-slate-200 p-3 md:grid-cols-[1fr_auto]">
               <input
